@@ -1,3 +1,5 @@
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/larksuite/oapi-sdk-go/v3 v3.0.30 h1:pMnTSpSGdqTxept5cz6qc9wroH8Ac1VY5nRrQ0FjVLs=
 github.com/larksuite/oapi-sdk-go/v3 v3.0.30/go.mod h1:FKi8vBgtkBt/xNRQUwdWvoDmsPh7/wP75Sn5IBIBQLk=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
