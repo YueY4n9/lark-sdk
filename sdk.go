@@ -100,7 +100,7 @@ func (c *LarkClient) GetAttachment(ctx context.Context, token string) error {
 	return nil
 }
 
-func (c *LarkClient) GetUserByDepartmentId(ctx context.Context, departmentId string) ([]*larkcontact.User, error) {
+func (c *LarkClient) GetUsersByDepartmentId(ctx context.Context, departmentId string) ([]*larkcontact.User, error) {
 	deptIds := make(map[string]struct{})
 	for hasMore, pageToken := true, ""; hasMore; {
 		getChildrenDeptReq := larkcontact.NewChildrenDepartmentReqBuilder().
@@ -318,6 +318,7 @@ func (c *LarkClient) GetDepartmentById(ctx context.Context, departmentId string)
 
 func (c *LarkClient) GetChildDepartment(ctx context.Context, departmentId string) ([]string, error) {
 	deptIds := make([]string, 0)
+	deptIds = append(deptIds, departmentId)
 	for hasMore, pageToken := true, ""; hasMore; {
 		getChildrenDeptReq := larkcontact.NewChildrenDepartmentReqBuilder().
 			DepartmentId(departmentId).
@@ -340,9 +341,58 @@ func (c *LarkClient) GetChildDepartment(ctx context.Context, departmentId string
 			pageToken = *getChildrenDeptResp.Data.PageToken
 		}
 		for _, department := range getChildrenDeptResp.Data.Items {
-			deptIds[] = *department.DepartmentId
+			deptIds = append(deptIds, *department.DepartmentId)
 		}
 	}
 	deptIds = slice.RmDupl(deptIds)
 	return deptIds, nil
+}
+
+func (c *LarkClient) GetChildDepartmentMap(ctx context.Context, departmentId string) (map[string]string, error) {
+	deptMap := make(map[string]string)
+	deptMap["d4e276efc6ac5fee"] = "上海本社"
+	parentMap := make(map[string]string)
+	for hasMore, pageToken := true, ""; hasMore; {
+		getChildrenDeptReq := larkcontact.NewChildrenDepartmentReqBuilder().
+			DepartmentId(departmentId).
+			UserIdType("user_id").
+			DepartmentIdType("department_id").
+			FetchChild(true).
+			PageToken(pageToken).
+			PageSize(50).
+			Build()
+		getChildrenDeptResp, err := c.client.Contact.Department.Children(ctx, getChildrenDeptReq)
+		if err != nil {
+			return nil, err
+		}
+		if !getChildrenDeptResp.Success() {
+			fmt.Println(getChildrenDeptResp.Code, getChildrenDeptResp.Msg, getChildrenDeptResp.RequestId())
+			return nil, errors.New(getChildrenDeptResp.Msg)
+		}
+		hasMore = *getChildrenDeptResp.Data.HasMore
+		if hasMore {
+			pageToken = *getChildrenDeptResp.Data.PageToken
+		}
+		for _, department := range getChildrenDeptResp.Data.Items {
+			deptMap[*department.DepartmentId] = *department.Name
+			parentMap[*department.DepartmentId] = *department.ParentDepartmentId
+		}
+	}
+	deptMap = buildDeptId2PathMap(deptMap, parentMap)
+	return deptMap, nil
+}
+
+func buildPath(deptId string, deptId2NameMap map[string]string, deptId2ParentIdMap map[string]string) string {
+	if parent, ok := deptId2ParentIdMap[deptId]; ok {
+		return buildPath(parent, deptId2NameMap, deptId2ParentIdMap) + "-" + deptId2NameMap[deptId]
+	}
+	return deptId2NameMap[deptId]
+}
+
+func buildDeptId2PathMap(deptId2NameMap map[string]string, deptId2ParentIdMap map[string]string) map[string]string {
+	deptId2PathMap := make(map[string]string)
+	for deptId := range deptId2NameMap {
+		deptId2PathMap[deptId] = buildPath(deptId, deptId2NameMap, deptId2ParentIdMap)
+	}
+	return deptId2PathMap
 }
