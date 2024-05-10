@@ -17,15 +17,15 @@ import (
 )
 
 type LarkClient struct {
-	client *lark.Client
+	Client *lark.Client
 }
 
 func NewClient(appId, appSecret string) *LarkClient {
-	return &LarkClient{client: lark.NewClient(appId, appSecret, lark.WithEnableTokenCache(true))}
+	return &LarkClient{Client: lark.NewClient(appId, appSecret, lark.WithEnableTokenCache(true))}
 }
 
 func (c *LarkClient) GetUserByUserId(ctx context.Context, userId string) (*larkcontact.User, error) {
-	resp, err := c.client.Contact.User.Get(ctx, larkcontact.NewGetUserReqBuilder().
+	resp, err := c.Client.Contact.User.Get(ctx, larkcontact.NewGetUserReqBuilder().
 		UserId(userId).
 		UserIdType("user_id").
 		DepartmentIdType("department_id").
@@ -46,7 +46,7 @@ func (c *LarkClient) GetEmpByUserId(ctx context.Context, userId string) (*larkeh
 		UserIdType("user_id").
 		UserIds([]string{userId}).
 		Build()
-	resp, err := c.client.Ehr.Employee.List(ctx, req)
+	resp, err := c.Client.Ehr.Employee.List(ctx, req)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -66,7 +66,7 @@ func (c *LarkClient) ListEmp(ctx context.Context, userIds []string) ([]*larkehr.
 			UserIdType("user_id").
 			UserIds(chunk).
 			Build()
-		resp, err := c.client.Ehr.Employee.List(ctx, req)
+		resp, err := c.Client.Ehr.Employee.List(ctx, req)
 		if err != nil {
 			fmt.Println(err)
 			return nil, err
@@ -81,7 +81,7 @@ func (c *LarkClient) ListEmp(ctx context.Context, userIds []string) ([]*larkehr.
 }
 
 func (c *LarkClient) GetAttachment(ctx context.Context, token string) error {
-	resp, err := c.client.Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
+	resp, err := c.Client.Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
 		Token(token).
 		Build())
 	if err != nil {
@@ -113,7 +113,7 @@ func (c *LarkClient) GetUsersByDeptId(ctx context.Context, departmentId string) 
 			PageToken(pageToken).
 			PageSize(50).
 			Build()
-		getChildrenDeptResp, err := c.client.Contact.Department.Children(ctx, getChildrenDeptReq)
+		getChildrenDeptResp, err := c.Client.Contact.Department.Children(ctx, getChildrenDeptReq)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +139,7 @@ func (c *LarkClient) GetUsersByDeptId(ctx context.Context, departmentId string) 
 				PageToken(pageToken).
 				PageSize(50).
 				Build()
-			getUserResp, err := c.client.Contact.User.FindByDepartment(ctx, getUserReq)
+			getUserResp, err := c.Client.Contact.User.FindByDepartment(ctx, getUserReq)
 			if err != nil {
 				return nil, err
 			}
@@ -169,7 +169,7 @@ func (c *LarkClient) SendMessage(ctx context.Context, userId, msgType, msg strin
 			Uuid(uuid.New().String()).
 			Build()).
 		Build()
-	msgCreateResp, err := c.client.Im.Message.Create(ctx, msgCreateReq)
+	msgCreateResp, err := c.Client.Im.Message.Create(ctx, msgCreateReq)
 	if err != nil {
 		return err
 	}
@@ -210,7 +210,7 @@ func (c *LarkClient) ListUserByDepartmentId(ctx context.Context, deptId string) 
 			PageToken(pageToken).
 			PageSize(50).
 			Build()
-		getChildrenDeptResp, err := c.client.Contact.Department.Children(ctx, getChildrenDeptReq)
+		getChildrenDeptResp, err := c.Client.Contact.Department.Children(ctx, getChildrenDeptReq)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +235,7 @@ func (c *LarkClient) ListUserByDepartmentId(ctx context.Context, deptId string) 
 				PageToken(pageToken).
 				PageSize(50).
 				Build()
-			getUserResp, err := c.client.Contact.User.FindByDepartment(ctx, getUserReq)
+			getUserResp, err := c.Client.Contact.User.FindByDepartment(ctx, getUserReq)
 			if err != nil {
 				return nil, err
 			}
@@ -263,7 +263,7 @@ func (c *LarkClient) ListRoleMember(ctx context.Context, roleId string) ([]*lark
 		UserIdType(`user_id`).
 		DepartmentIdType(`department_id`).
 		Build()
-	resp, err := c.client.Contact.FunctionalRoleMember.List(ctx, req)
+	resp, err := c.Client.Contact.FunctionalRoleMember.List(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +305,7 @@ func (c *LarkClient) GetDeptById(ctx context.Context, departmentId string) (*lar
 		UserIdType(`user_id`).
 		DepartmentIdType(`department_id`).
 		Build()
-	resp, err := c.client.Contact.Department.Get(ctx, req)
+	resp, err := c.Client.Contact.Department.Get(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +328,7 @@ func (c *LarkClient) GetChildDepartment(ctx context.Context, departmentId string
 			PageToken(pageToken).
 			PageSize(50).
 			Build()
-		getChildrenDeptResp, err := c.client.Contact.Department.Children(ctx, getChildrenDeptReq)
+		getChildrenDeptResp, err := c.Client.Contact.Department.Children(ctx, getChildrenDeptReq)
 		if err != nil {
 			return nil, err
 		}
@@ -361,7 +361,7 @@ func (c *LarkClient) GetChildDepartmentMap(ctx context.Context, departmentId str
 			PageToken(pageToken).
 			PageSize(50).
 			Build()
-		getChildrenDeptResp, err := c.client.Contact.Department.Children(ctx, getChildrenDeptReq)
+		getChildrenDeptResp, err := c.Client.Contact.Department.Children(ctx, getChildrenDeptReq)
 		if err != nil {
 			return nil, err
 		}
@@ -407,7 +407,7 @@ func (c *LarkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 			employeeReqBuilder.PageToken(pageToken)
 		}
 		req := employeeReqBuilder.Build()
-		resp, err := c.client.Ehr.Employee.List(ctx, req)
+		resp, err := c.Client.Ehr.Employee.List(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -442,7 +442,7 @@ func (c *LarkClient) SubscribeApproval(ctx context.Context, code string) error {
 	req := larkapproval.NewSubscribeApprovalReqBuilder().
 		ApprovalCode(code).
 		Build()
-	resp, err := c.client.Approval.Approval.Subscribe(ctx, req)
+	resp, err := c.Client.Approval.Approval.Subscribe(ctx, req)
 	if err != nil {
 		return err
 	}
