@@ -13,13 +13,31 @@ GORPOXY=https://gpproxy.cn
 
 # api list
 
-1. GetUserByUserId
-2. GetEmpByUserId
-3. GetDeptByDeptId
-4. ListUserByDeptId
-5. ListDeptByDeptId
-6. SendMessage
-7. AllEmp
-8. AllDept
-9. AllUserId
-10. SubscribeApproval
+1. user
+- [x] GetUserByUserId
+- [x] GetEmpByUserId
+- [x] ListUserByDeptId
+- [x] AllEmp
+- [x] AllUserId
+
+
+2. dept
+- [x] GetDeptById
+- [x] ListChildDeptByDeptId
+- [x] ListChildDeptIdByDeptId
+- [ ] AllDept
+
+
+3. approval
+
+
+- [x] GetAttachment
+
+
+
+- [x] SendMessage
+
+- [x] SubscribeApproval
+
+# TODO list
+
