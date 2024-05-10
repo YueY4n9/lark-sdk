@@ -41,3 +41,4 @@ GORPOXY=https://gpproxy.cn
 
 # TODO list
 
+- [ ] SendCard

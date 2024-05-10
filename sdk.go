@@ -2,6 +2,7 @@ package lark_sdk
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
 	"io"
@@ -82,6 +83,7 @@ func (c *LarkClient) ListEmp(ctx context.Context, userIds []string) ([]*larkehr.
 	return res, nil
 }
 
+// GetAttachment finish
 func (c *LarkClient) GetAttachment(ctx context.Context, token string) error {
 	resp, err := c.Client.Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
 		Token(token).
@@ -104,10 +106,10 @@ func (c *LarkClient) GetAttachment(ctx context.Context, token string) error {
 	return nil
 }
 
-// SendMessage finish
-func (c *LarkClient) SendMessage(ctx context.Context, receivedType, receivedId, msgType, content string) error {
-	msgCreateReq := larkim.NewCreateMessageReqBuilder().
-		ReceiveIdType(receivedType).
+// SendMsg finish
+func (c *LarkClient) SendMsg(ctx context.Context, receiveIdType, receivedId, msgType, content string) error {
+	req := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType(receiveIdType).
 		Body(larkim.NewCreateMessageReqBodyBuilder().
 			ReceiveId(receivedId).
 			MsgType(msgType).
@@ -115,15 +117,39 @@ func (c *LarkClient) SendMessage(ctx context.Context, receivedType, receivedId, 
 			Uuid(uuid.New().String()).
 			Build()).
 		Build()
-	msgCreateResp, err := c.Client.Im.Message.Create(ctx, msgCreateReq)
+	resp, err := c.Client.Im.Message.Create(ctx, req)
 	if err != nil {
 		return err
 	}
-	if !msgCreateResp.Success() {
-		fmt.Println(msgCreateResp.Code, msgCreateResp.Msg, msgCreateResp.RequestId())
-		return errors.New(msgCreateResp.Msg)
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return errors.New(resp.Msg)
 	}
 	return nil
+}
+
+// SendCardMsg TODO test
+func (c *LarkClient) SendCardMsg(ctx context.Context, receiveIdType, receivedId, cardId string, templateVar interface{}) error {
+	type msgData struct {
+		TemplateId       string      `json:"template_id"`
+		TemplateVariable interface{} `json:"template_variable"`
+	}
+	type message struct {
+		Type string  `json:"type"`
+		Data msgData `json:"data"`
+	}
+	m := message{
+		Type: "template",
+		Data: msgData{
+			TemplateId:       cardId,
+			TemplateVariable: templateVar,
+		},
+	}
+	bytes, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return c.SendMsg(ctx, receiveIdType, receivedId, "interactive", string(bytes))
 }
 
 // ListUserByDeptId finish
@@ -187,46 +213,46 @@ func (c *LarkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]str
 	return res, nil
 }
 
-func (c *LarkClient) ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error) {
-	req := larkcontact.NewListFunctionalRoleMemberReqBuilder().
-		RoleId(roleId).
-		UserIdType(`user_id`).
-		DepartmentIdType(`department_id`).
-		Build()
-	resp, err := c.Client.Contact.FunctionalRoleMember.List(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	if !resp.Success() {
-		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
-		return nil, errors.New(resp.Msg)
-	}
-	return resp.Data.Members, nil
-}
+//func (c *LarkClient) ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error) {
+//	req := larkcontact.NewListFunctionalRoleMemberReqBuilder().
+//		RoleId(roleId).
+//		UserIdType(`user_id`).
+//		DepartmentIdType(`department_id`).
+//		Build()
+//	resp, err := c.Client.Contact.FunctionalRoleMember.List(ctx, req)
+//	if err != nil {
+//		return nil, err
+//	}
+//	if !resp.Success() {
+//		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+//		return nil, errors.New(resp.Msg)
+//	}
+//	return resp.Data.Members, nil
+//}
 
-func (c *LarkClient) GetPMRoleByUserId(ctx context.Context, userId string) ([]string, error) {
-	// pm_role_id: 7vb5do17annj7mr
-	res := make([]string, 0)
-	// 1. 获取 pm 角色下所有成员管理的 user_id 和管理范围的 department_ids
-	roleMembers, err := c.ListRoleMember(ctx, "7vb5do17annj7mr")
-	if err != nil {
-		return nil, err
-	}
-	// 2. 获取 pm 用户的管理部门下的所有人员
-	for _, roleMember := range roleMembers {
-		for _, dept := range roleMember.DepartmentIds {
-			userIds, err := c.ListUserByDeptId(context.Background(), dept)
-			if err != nil {
-				return nil, err
-			}
-			res = append(res, userIds...)
-		}
-		res = _slice.RemoveDuplication(res)
-		// 3. 每天定时保存到数据库中
-	}
-	// 3. 将用户的部门列表和每个 pm 角色的部门列表做交集，判断用户是否属于该 pm 管理
-	return res, nil
-}
+//func (c *LarkClient) GetPMRoleByUserId(ctx context.Context, userId string) ([]string, error) {
+//	// pm_role_id: 7vb5do17annj7mr
+//	res := make([]string, 0)
+//	// 1. 获取 pm 角色下所有成员管理的 user_id 和管理范围的 department_ids
+//	roleMembers, err := c.ListRoleMember(ctx, "7vb5do17annj7mr")
+//	if err != nil {
+//		return nil, err
+//	}
+//	// 2. 获取 pm 用户的管理部门下的所有人员
+//	for _, roleMember := range roleMembers {
+//		for _, dept := range roleMember.DepartmentIds {
+//			userIds, err := c.ListUserByDeptId(context.Background(), dept)
+//			if err != nil {
+//				return nil, err
+//			}
+//			res = append(res, userIds...)
+//		}
+//		res = _slice.RemoveDuplication(res)
+//		// 3. 每天定时保存到数据库中
+//	}
+//	// 3. 将用户的部门列表和每个 pm 角色的部门列表做交集，判断用户是否属于该 pm 管理
+//	return res, nil
+//}
 
 // GetDeptById finish
 func (c *LarkClient) GetDeptById(ctx context.Context, departmentId string) (*larkcontact.Department, error) {
