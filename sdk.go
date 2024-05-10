@@ -3,15 +3,17 @@ package lark_sdk
 import (
 	"context"
 	"fmt"
+	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
+	"io"
+	"os"
+
+	_slice "github.com/YueY4n9/gotools/slice"
 	"github.com/google/uuid"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/pkg/errors"
-	"io"
-	"lark-sdk/common/slice"
-	"os"
 )
 
 type LarkClient struct {
@@ -38,9 +40,27 @@ func (c *LarkClient) GetUserByUserId(ctx context.Context, userId string) (*larkc
 	return resp.Data.User, nil
 }
 
-func (c *LarkClient) ListEmployee(ctx context.Context, userIds []string) ([]*larkehr.Employee, error) {
+func (c *LarkClient) GetEmpByUserId(ctx context.Context, userId string) (*larkehr.Employee, error) {
+	req := larkehr.NewListEmployeeReqBuilder().
+		View("full").
+		UserIdType("user_id").
+		UserIds([]string{userId}).
+		Build()
+	resp, err := c.client.Ehr.Employee.List(ctx, req)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return nil, errors.New(fmt.Sprintf("%v %v %v", resp.Code, resp.Msg, resp.RequestId()))
+	}
+	return resp.Data.Items[0], nil
+}
+
+func (c *LarkClient) ListEmp(ctx context.Context, userIds []string) ([]*larkehr.Employee, error) {
 	res := make([]*larkehr.Employee, 0)
-	for _, chunk := range slice.ChunkSlice(userIds, 100) {
+	for _, chunk := range _slice.ChunkSlice(userIds, 100) {
 		req := larkehr.NewListEmployeeReqBuilder().
 			View("full").
 			UserIdType("user_id").
@@ -60,24 +80,6 @@ func (c *LarkClient) ListEmployee(ctx context.Context, userIds []string) ([]*lar
 	return res, nil
 }
 
-func (c *LarkClient) GetEmployeeByUserId(ctx context.Context, userId string) (*larkehr.Employee, error) {
-	req := larkehr.NewListEmployeeReqBuilder().
-		View("full").
-		UserIdType("user_id").
-		UserIds([]string{userId}).
-		Build()
-	resp, err := c.client.Ehr.Employee.List(ctx, req)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	if !resp.Success() {
-		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
-		return nil, errors.New(fmt.Sprintf("%v %v %v", resp.Code, resp.Msg, resp.RequestId()))
-	}
-	return resp.Data.Items[0], nil
-}
-
 func (c *LarkClient) GetAttachment(ctx context.Context, token string) error {
 	resp, err := c.client.Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
 		Token(token).
@@ -88,7 +90,7 @@ func (c *LarkClient) GetAttachment(ctx context.Context, token string) error {
 	}
 	if !resp.Success() {
 		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
-		return errors.New(fmt.Sprintf("%v %v %v", resp.Code, resp.Msg, resp.RequestId()))
+		return errors.New(resp.Msg)
 	}
 	data, err := io.ReadAll(resp.File)
 	if err != nil {
@@ -100,7 +102,7 @@ func (c *LarkClient) GetAttachment(ctx context.Context, token string) error {
 	return nil
 }
 
-func (c *LarkClient) GetUsersByDepartmentId(ctx context.Context, departmentId string) ([]*larkcontact.User, error) {
+func (c *LarkClient) GetUsersByDeptId(ctx context.Context, departmentId string) ([]*larkcontact.User, error) {
 	deptIds := make(map[string]struct{})
 	for hasMore, pageToken := true, ""; hasMore; {
 		getChildrenDeptReq := larkcontact.NewChildrenDepartmentReqBuilder().
@@ -180,7 +182,7 @@ func (c *LarkClient) SendMessage(ctx context.Context, userId, msgType, msg strin
 
 func (c *LarkClient) GetDepartmentManagerByDfs(ctx context.Context, userId string) ([]string, error) {
 	res := make([]string, 0)
-	userInfo, err := c.GetEmployeeByUserId(ctx, userId)
+	userInfo, err := c.GetEmpByUserId(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -210,12 +212,11 @@ func (c *LarkClient) ListUserByDepartmentId(ctx context.Context, deptId string) 
 			Build()
 		getChildrenDeptResp, err := c.client.Contact.Department.Children(ctx, getChildrenDeptReq)
 		if err != nil {
-			fmt.Println(err)
 			return nil, err
 		}
 		if !getChildrenDeptResp.Success() {
 			fmt.Println(getChildrenDeptResp.Code, getChildrenDeptResp.Msg, getChildrenDeptResp.RequestId())
-			return nil, err
+			return nil, errors.New(getChildrenDeptResp.Msg)
 		}
 		hasMore = *getChildrenDeptResp.Data.HasMore
 		if hasMore {
@@ -236,7 +237,6 @@ func (c *LarkClient) ListUserByDepartmentId(ctx context.Context, deptId string) 
 				Build()
 			getUserResp, err := c.client.Contact.User.FindByDepartment(ctx, getUserReq)
 			if err != nil {
-				fmt.Println(err)
 				return nil, err
 			}
 			if !getUserResp.Success() {
@@ -252,7 +252,7 @@ func (c *LarkClient) ListUserByDepartmentId(ctx context.Context, deptId string) 
 			}
 		}
 	}
-	res = slice.RmDupl(res)
+	res = _slice.RemoveDuplication(res)
 	fmt.Printf("lark user count: %v\n", len(res))
 	return res, nil
 }
@@ -292,14 +292,14 @@ func (c *LarkClient) GetPMRoleByUserId(ctx context.Context, userId string) ([]st
 			}
 			res = append(res, userIds...)
 		}
-		res = slice.RmDupl(res)
+		res = _slice.RemoveDuplication(res)
 		// 3. 每天定时保存到数据库中
 	}
 	// 3. 将用户的部门列表和每个 pm 角色的部门列表做交集，判断用户是否属于该 pm 管理
 	return res, nil
 }
 
-func (c *LarkClient) GetDepartmentById(ctx context.Context, departmentId string) (*larkcontact.Department, error) {
+func (c *LarkClient) GetDeptById(ctx context.Context, departmentId string) (*larkcontact.Department, error) {
 	req := larkcontact.NewGetDepartmentReqBuilder().
 		DepartmentId(departmentId).
 		UserIdType(`user_id`).
@@ -344,7 +344,7 @@ func (c *LarkClient) GetChildDepartment(ctx context.Context, departmentId string
 			deptIds = append(deptIds, *department.DepartmentId)
 		}
 	}
-	deptIds = slice.RmDupl(deptIds)
+	deptIds = _slice.RemoveDuplication(deptIds)
 	return deptIds, nil
 }
 
@@ -395,4 +395,60 @@ func buildDeptId2PathMap(deptId2NameMap map[string]string, deptId2ParentIdMap ma
 		deptId2PathMap[deptId] = buildPath(deptId, deptId2NameMap, deptId2ParentIdMap)
 	}
 	return deptId2PathMap
+}
+
+func (c *LarkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
+	res := make([]*larkehr.Employee, 0)
+	for hasMore, pageToken := true, ""; hasMore; {
+		employeeReqBuilder := larkehr.NewListEmployeeReqBuilder().
+			View("full").
+			PageSize(100).UserIdType("user_id")
+		if pageToken != "" {
+			employeeReqBuilder.PageToken(pageToken)
+		}
+		req := employeeReqBuilder.Build()
+		resp, err := c.client.Ehr.Employee.List(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if !resp.Success() {
+			fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+			return nil, errors.New(resp.Msg)
+		}
+		hasMore = *resp.Data.HasMore
+		if hasMore {
+			pageToken = *resp.Data.PageToken
+		}
+		for _, item := range resp.Data.Items {
+			res = append(res, item)
+		}
+	}
+	return res, nil
+}
+
+func (c *LarkClient) AllUserId(ctx context.Context) ([]string, error) {
+	userIds := make([]string, 0)
+	allEmp, err := c.AllEmp(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, emp := range allEmp {
+		userIds = append(userIds, *emp.UserId)
+	}
+	return userIds, nil
+}
+
+func (c *LarkClient) SubscribeApproval(ctx context.Context, code string) error {
+	req := larkapproval.NewSubscribeApprovalReqBuilder().
+		ApprovalCode(code).
+		Build()
+	resp, err := c.client.Approval.Approval.Subscribe(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return errors.New(resp.Msg)
+	}
+	return nil
 }

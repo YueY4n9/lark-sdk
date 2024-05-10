@@ -3,13 +3,12 @@ package lark_sdk
 import (
 	"context"
 	"fmt"
-	"lark-sdk/common/slice"
 	"sort"
 	"strings"
 	"testing"
 
-	print2 "lark-sdk/common/print"
-	"lark-sdk/common/sendmsg"
+	"github.com/YueY4n9/gotools/echo"
+	_slice "github.com/YueY4n9/gotools/slice"
 )
 
 func newClient() *LarkClient {
@@ -26,16 +25,16 @@ func TestLarkClient_GetUserByUserId(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	print2.Json(userInfo)
+	echo.Json(userInfo)
 }
 
 func TestLarkClient_GetEmployeeByUserId(t *testing.T) {
 	c := newClient()
-	employee, err := c.GetEmployeeByUserId(context.Background(), "f42g7cc9")
+	employee, err := c.GetEmpByUserId(context.Background(), "f42g7cc9")
 	if err != nil {
 		t.Fatal(err)
 	}
-	print2.Json(employee)
+	echo.Json(employee)
 }
 
 func TestLarkClient_GetAttachment(t *testing.T) {
@@ -52,7 +51,7 @@ func TestLarkClient_GetDepartmentManagerByDfs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	print2.Json(managerByDfs)
+	echo.Json(managerByDfs)
 }
 
 func TestLarkClient_ListUserByDepartmentId(t *testing.T) {
@@ -66,14 +65,14 @@ func TestLarkClient_ListUserByDepartmentId(t *testing.T) {
 		}
 		res = append(res, userIds...)
 	}
-	res = slice.RmDupl(res)
-	print2.Json(res)
+	res = _slice.RemoveDuplication(res)
+	echo.Json(res)
 }
 
 func TestLarkClient_GetUsersByDepartmentId(t *testing.T) {
 	c := newClient()
 	departmentMap, _ := c.GetChildDepartmentMap(context.Background(), "d4e276efc6ac5fee")
-	users, _ := c.GetUsersByDepartmentId(context.Background(), "d4e276efc6ac5fee")
+	users, _ := c.GetUsersByDeptId(context.Background(), "d4e276efc6ac5fee")
 	fmt.Println(len(users))
 	m := make(map[string]string)
 	for _, user := range users {
@@ -114,21 +113,14 @@ func TestLarkClient_GetUsersByDepartmentId(t *testing.T) {
 		}
 		return res[i].Targets[0] < res[j].Targets[0]
 	})
-	print2.Json(res)
+	echo.Json(res)
 	emptyUser := make([]string, 0)
 	for i := range res {
 		if res[i].Labels.Ip == "" {
 			emptyUser = append(emptyUser, res[i].Labels.Name)
 		}
 	}
-	print2.Json(emptyUser)
-}
-
-func TestSendCxMsg(t *testing.T) {
-	sendmsg.SendCxMsg()
-}
-
-type name struct {
+	echo.Json(emptyUser)
 }
 
 type T struct {
