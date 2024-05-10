@@ -23,3 +23,5 @@ go.work
 sdk_test.go
 
 ./temp
+
+.idea
