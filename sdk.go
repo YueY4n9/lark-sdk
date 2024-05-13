@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
 	"io"
 	"os"
 
+	"github.com/YueY4n9/gotools/echo"
 	_slice "github.com/YueY4n9/gotools/slice"
 	"github.com/google/uuid"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -128,7 +129,7 @@ func (c *LarkClient) SendMsg(ctx context.Context, receiveIdType, receivedId, msg
 	return nil
 }
 
-// SendCardMsg TODO test
+// SendCardMsg finish
 func (c *LarkClient) SendCardMsg(ctx context.Context, receiveIdType, receivedId, cardId string, templateVar interface{}) error {
 	type msgData struct {
 		TemplateId       string      `json:"template_id"`
@@ -152,9 +153,8 @@ func (c *LarkClient) SendCardMsg(ctx context.Context, receiveIdType, receivedId,
 	return c.SendMsg(ctx, receiveIdType, receivedId, "interactive", string(bytes))
 }
 
-// ListUserByDeptId finish
-func (c *LarkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]string, error) {
-	res := make([]string, 0)
+func (c *LarkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]*larkcontact.User, error) {
+	res := make([]*larkcontact.User, 0)
 	deptIds := make(map[string]struct{})
 	deptIds[deptId] = struct{}{}
 	for hasMore, pageToken := true, ""; hasMore; {
@@ -204,7 +204,7 @@ func (c *LarkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]str
 				pageToken = *getUserResp.Data.PageToken
 			}
 			for _, user := range getUserResp.Data.Items {
-				res = append(res, *user.UserId)
+				res = append(res, user)
 			}
 		}
 	}
@@ -213,46 +213,19 @@ func (c *LarkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]str
 	return res, nil
 }
 
-//func (c *LarkClient) ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error) {
-//	req := larkcontact.NewListFunctionalRoleMemberReqBuilder().
-//		RoleId(roleId).
-//		UserIdType(`user_id`).
-//		DepartmentIdType(`department_id`).
-//		Build()
-//	resp, err := c.Client.Contact.FunctionalRoleMember.List(ctx, req)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if !resp.Success() {
-//		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
-//		return nil, errors.New(resp.Msg)
-//	}
-//	return resp.Data.Members, nil
-//}
-
-//func (c *LarkClient) GetPMRoleByUserId(ctx context.Context, userId string) ([]string, error) {
-//	// pm_role_id: 7vb5do17annj7mr
-//	res := make([]string, 0)
-//	// 1. 获取 pm 角色下所有成员管理的 user_id 和管理范围的 department_ids
-//	roleMembers, err := c.ListRoleMember(ctx, "7vb5do17annj7mr")
-//	if err != nil {
-//		return nil, err
-//	}
-//	// 2. 获取 pm 用户的管理部门下的所有人员
-//	for _, roleMember := range roleMembers {
-//		for _, dept := range roleMember.DepartmentIds {
-//			userIds, err := c.ListUserByDeptId(context.Background(), dept)
-//			if err != nil {
-//				return nil, err
-//			}
-//			res = append(res, userIds...)
-//		}
-//		res = _slice.RemoveDuplication(res)
-//		// 3. 每天定时保存到数据库中
-//	}
-//	// 3. 将用户的部门列表和每个 pm 角色的部门列表做交集，判断用户是否属于该 pm 管理
-//	return res, nil
-//}
+// ListUserIdByDeptId finish
+func (c *LarkClient) ListUserIdByDeptId(ctx context.Context, deptId string) ([]string, error) {
+	res := make([]string, 0)
+	users, err := c.ListUserByDeptId(ctx, deptId)
+	if err != nil {
+		return nil, err
+	}
+	for _, user := range users {
+		res = append(res, *user.UserId)
+	}
+	_slice.RemoveDuplication(res)
+	return res, nil
+}
 
 // GetDeptById finish
 func (c *LarkClient) GetDeptById(ctx context.Context, departmentId string) (*larkcontact.Department, error) {
@@ -321,6 +294,95 @@ func (c *LarkClient) ListChildDeptIdByDeptId(ctx context.Context, deptId string)
 	return res, nil
 }
 
+// AllEmp finish
+func (c *LarkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
+	res := make([]*larkehr.Employee, 0)
+	for hasMore, pageToken := true, ""; hasMore; {
+		employeeReqBuilder := larkehr.NewListEmployeeReqBuilder().
+			View("full").
+			PageSize(100).UserIdType("user_id")
+		if pageToken != "" {
+			employeeReqBuilder.PageToken(pageToken)
+		}
+		req := employeeReqBuilder.Build()
+		resp, err := c.Client.Ehr.Employee.List(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if !resp.Success() {
+			fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+			return nil, errors.New(resp.Msg)
+		}
+		hasMore = *resp.Data.HasMore
+		if hasMore {
+			pageToken = *resp.Data.PageToken
+		}
+		for _, item := range resp.Data.Items {
+			res = append(res, item)
+		}
+	}
+	return res, nil
+}
+
+// AllUser TODO test
+func (c *LarkClient) AllUser(ctx context.Context) ([]*larkcontact.User, error) {
+	res := make([]*larkcontact.User, 0)
+	users, err := c.ListUserByDeptId(ctx, "0")
+	if err != nil {
+		return nil, err
+	}
+	res = append(res, users...)
+	echo.Json(len(res))
+	return res, nil
+}
+
+// AllUserId finish
+func (c *LarkClient) AllUserId(ctx context.Context) ([]string, error) {
+	userIds := make([]string, 0)
+	allEmp, err := c.AllEmp(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, emp := range allEmp {
+		userIds = append(userIds, *emp.UserId)
+	}
+	return userIds, nil
+}
+
+// SubscribeApproval finish
+func (c *LarkClient) SubscribeApproval(ctx context.Context, code string) error {
+	req := larkapproval.NewSubscribeApprovalReqBuilder().
+		ApprovalCode(code).
+		Build()
+	resp, err := c.Client.Approval.Approval.Subscribe(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return errors.New(resp.Msg)
+	}
+	return nil
+}
+
+func (c *LarkClient) GetApprovalByCode(ctx context.Context, code string) (*larkapproval.GetApprovalRespData, error) {
+	req := larkapproval.NewGetApprovalReqBuilder().
+		ApprovalCode(code).
+		Locale("zh-CN").
+		WithAdminId(true).
+		UserIdType("user_id").
+		Build()
+	resp, err := c.Client.Approval.Approval.Get(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return nil, errors.New(resp.Msg)
+	}
+	return resp.Data, nil
+}
+
 //func (c *LarkClient) GetChildDepartmentMap(ctx context.Context, departmentId string) (map[string]string, error) {
 //	deptMap := make(map[string]string)
 //	deptMap["d4e276efc6ac5fee"] = "上海本社"
@@ -387,61 +449,43 @@ func (c *LarkClient) ListChildDeptIdByDeptId(ctx context.Context, deptId string)
 //	return res, nil
 //}
 
-// AllEmp finish
-func (c *LarkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
-	res := make([]*larkehr.Employee, 0)
-	for hasMore, pageToken := true, ""; hasMore; {
-		employeeReqBuilder := larkehr.NewListEmployeeReqBuilder().
-			View("full").
-			PageSize(100).UserIdType("user_id")
-		if pageToken != "" {
-			employeeReqBuilder.PageToken(pageToken)
-		}
-		req := employeeReqBuilder.Build()
-		resp, err := c.Client.Ehr.Employee.List(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		if !resp.Success() {
-			fmt.Println(resp.Code, resp.Msg, resp.RequestId())
-			return nil, errors.New(resp.Msg)
-		}
-		hasMore = *resp.Data.HasMore
-		if hasMore {
-			pageToken = *resp.Data.PageToken
-		}
-		for _, item := range resp.Data.Items {
-			res = append(res, item)
-		}
-	}
-	return res, nil
-}
+//func (c *LarkClient) ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error) {
+//	req := larkcontact.NewListFunctionalRoleMemberReqBuilder().
+//		RoleId(roleId).
+//		UserIdType(`user_id`).
+//		DepartmentIdType(`department_id`).
+//		Build()
+//	resp, err := c.Client.Contact.FunctionalRoleMember.List(ctx, req)
+//	if err != nil {
+//		return nil, err
+//	}
+//	if !resp.Success() {
+//		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+//		return nil, errors.New(resp.Msg)
+//	}
+//	return resp.Data.Members, nil
+//}
 
-// AllUserId finish
-func (c *LarkClient) AllUserId(ctx context.Context) ([]string, error) {
-	userIds := make([]string, 0)
-	allEmp, err := c.AllEmp(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, emp := range allEmp {
-		userIds = append(userIds, *emp.UserId)
-	}
-	return userIds, nil
-}
-
-// SubscribeApproval finish
-func (c *LarkClient) SubscribeApproval(ctx context.Context, code string) error {
-	req := larkapproval.NewSubscribeApprovalReqBuilder().
-		ApprovalCode(code).
-		Build()
-	resp, err := c.Client.Approval.Approval.Subscribe(ctx, req)
-	if err != nil {
-		return err
-	}
-	if !resp.Success() {
-		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
-		return errors.New(resp.Msg)
-	}
-	return nil
-}
+//func (c *LarkClient) GetPMRoleByUserId(ctx context.Context, userId string) ([]string, error) {
+//	// pm_role_id: 7vb5do17annj7mr
+//	res := make([]string, 0)
+//	// 1. 获取 pm 角色下所有成员管理的 user_id 和管理范围的 department_ids
+//	roleMembers, err := c.ListRoleMember(ctx, "7vb5do17annj7mr")
+//	if err != nil {
+//		return nil, err
+//	}
+//	// 2. 获取 pm 用户的管理部门下的所有人员
+//	for _, roleMember := range roleMembers {
+//		for _, dept := range roleMember.DepartmentIds {
+//			userIds, err := c.ListUserIdByDeptId(context.Background(), dept)
+//			if err != nil {
+//				return nil, err
+//			}
+//			res = append(res, userIds...)
+//		}
+//		res = _slice.RemoveDuplication(res)
+//		// 3. 每天定时保存到数据库中
+//	}
+//	// 3. 将用户的部门列表和每个 pm 角色的部门列表做交集，判断用户是否属于该 pm 管理
+//	return res, nil
+//}

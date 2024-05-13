@@ -12,8 +12,7 @@ GORPOXY=https://gpproxy.cn
 
 
 # api list
-
-1. user
+## user
 - [x] GetUserByUserId
 - [x] GetEmpByUserId
 - [x] ListUserByDeptId
@@ -21,24 +20,23 @@ GORPOXY=https://gpproxy.cn
 - [x] AllUserId
 
 
-2. dept
+## dept
 - [x] GetDeptById
 - [x] ListChildDeptByDeptId
 - [x] ListChildDeptIdByDeptId
 - [ ] AllDept
 
 
-3. approval
+## approval
+- [x] SubscribeApproval
+- [x] GetApprovalByCode
 
 
 - [x] GetAttachment
 
-
-
+## Message
 - [x] SendMessage
-
-- [x] SubscribeApproval
+- [x] SendCard
 
 # TODO list
 
-- [ ] SendCard
