@@ -11,7 +11,7 @@ import (
 )
 
 func newClient() *LarkClient {
-	return NewClient("cli_a6b488d797f8500c", "d91mgv3S0ZBVu0IKpX5vGfkiHWMACAkV")
+	return NewClient("", "")
 }
 
 func TestNewClient(t *testing.T) {
