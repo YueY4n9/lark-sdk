@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	_map "github.com/YueY4n9/gotools/map"
 	"io"
 	"os"
 
@@ -208,8 +209,11 @@ func (c *LarkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]*la
 			}
 		}
 	}
-	res = _slice.RemoveDuplication(res)
-	fmt.Printf("lark user count: %v\n", len(res))
+	userSet := make(map[string]*larkcontact.User)
+	for _, userInfo := range res {
+		userSet[*userInfo.UserId] = userInfo
+	}
+	res = _map.GetValues(userSet)
 	return res, nil
 }
 
@@ -326,12 +330,10 @@ func (c *LarkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 
 // AllUser finish
 func (c *LarkClient) AllUser(ctx context.Context) ([]*larkcontact.User, error) {
-	res := make([]*larkcontact.User, 0)
-	users, err := c.ListUserByDeptId(ctx, "0")
+	res, err := c.ListUserByDeptId(ctx, "0")
 	if err != nil {
 		return nil, err
 	}
-	res = append(res, users...)
 	echo.Json(len(res))
 	return res, nil
 }
@@ -446,4 +448,30 @@ func (c *LarkClient) GetApprovalInstById(ctx context.Context, instId string) (*l
 		return nil, errors.New(resp.Msg)
 	}
 	return resp.Data, nil
+}
+
+// SearchApprovalInst user_id、approval_code、instance_code、instance_external_id、group_external_id 不得均为空
+// approval_code 和 group_external_id 查询结果取并集，instance_code 和 instance_external_id 查询结果取并集，其他查询条件都对应取交集
+// 查询时间跨度不得大于30天，开始和结束时间必须都设置，或者都不设置
+func (c *LarkClient) SearchApprovalInst(ctx context.Context, userId, approvalCode, instCode string) ([]*larkapproval.InstanceSearchItem, error) {
+	req := larkapproval.NewQueryInstanceReqBuilder().
+		UserIdType("user_id").
+		InstanceSearch(larkapproval.NewInstanceSearchBuilder().
+			UserId(userId).
+			ApprovalCode(approvalCode).
+			InstanceCode(instCode).
+			InstanceStatus(`PENDING`).
+			InstanceStartTimeFrom(`1547654251506`).
+			InstanceStartTimeTo(`1547654251506`).
+			Build()).
+		Build()
+	resp, err := c.Client.Approval.Instance.Query(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return nil, errors.New(resp.Msg)
+	}
+	return resp.Data.InstanceList, nil
 }

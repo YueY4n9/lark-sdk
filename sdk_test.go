@@ -3,7 +3,9 @@ package lark_sdk
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/YueY4n9/gotools/echo"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
@@ -11,7 +13,7 @@ import (
 )
 
 func newClient() *LarkClient {
-	return NewClient("", "")
+	return NewClient("cli_a6b488d797f8500c", "d91mgv3S0ZBVu0IKpX5vGfkiHWMACAkV")
 }
 
 func TestNewClient(t *testing.T) {
@@ -68,9 +70,50 @@ func TestLarkClient_AllUser(t *testing.T) {
 	}
 	for _, user := range allUser {
 		for _, field := range user.CustomAttrs {
-			echo.Json(field)
+			if *field.Id == "C-7271191843688349697" && *field.Value.Text == "A049" {
+				echo.Json(*user.UserId)
+			}
+			if *field.Id == "C-7271191843688349697" {
+				workstation := *field.Value.Text
+				if !strings.Contains(workstation, "-") && !containsChinese(workstation) {
+					workstation = replaceWorkstation(workstation)
+					err = updateWorkstation(ctx, *user.UserId, workstation)
+					if err != nil {
+						t.Fatal(err)
+					}
+					echo.Json(workstation)
+				} else if strings.Contains(workstation, "--") {
+					workstation = strings.ReplaceAll(workstation, "--", "-")
+					err = updateWorkstation(ctx, *user.UserId, workstation)
+					if err != nil {
+						t.Fatal(err)
+					}
+					echo.Json(workstation)
+				}
+				break
+			}
 		}
 	}
+}
+
+func containsChinese(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Scripts["Han"], r) {
+			return true
+		}
+	}
+	return false
+}
+
+func replaceWorkstation(workstation string) string {
+	if len(workstation) == 5 {
+		workstation = strings.Join([]string{workstation[:2], "-", workstation[2:]}, "")
+		echo.Json(workstation)
+	} else if len(workstation) == 6 {
+		workstation = strings.Join([]string{workstation[:3], "-", workstation[3:]}, "")
+		echo.Json(workstation)
+	}
+	return workstation
 }
 
 func updateWorkstation(ctx context.Context, userId, workstation string) error {
@@ -92,7 +135,7 @@ func updateWorkstation(ctx context.Context, userId, workstation string) error {
 			}).
 			Build()).
 		Build()
-	resp, err := c.Client.Contact.User.Patch(context.Background(), req)
+	resp, err := c.Client.Contact.User.Patch(ctx, req)
 	if err != nil {
 		return err
 	}
