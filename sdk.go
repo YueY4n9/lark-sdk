@@ -324,7 +324,7 @@ func (c *LarkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 	return res, nil
 }
 
-// AllUser TODO test
+// AllUser finish
 func (c *LarkClient) AllUser(ctx context.Context) ([]*larkcontact.User, error) {
 	res := make([]*larkcontact.User, 0)
 	users, err := c.ListUserByDeptId(ctx, "0")
@@ -365,6 +365,8 @@ func (c *LarkClient) SubscribeApproval(ctx context.Context, code string) error {
 	return nil
 }
 
+// GetApprovalByCode
+// Deprecated, this function renamed to GetApprovalDefineByCode, v1.0.0 will remove this function
 func (c *LarkClient) GetApprovalByCode(ctx context.Context, code string) (*larkapproval.GetApprovalRespData, error) {
 	req := larkapproval.NewGetApprovalReqBuilder().
 		ApprovalCode(code).
@@ -383,109 +385,65 @@ func (c *LarkClient) GetApprovalByCode(ctx context.Context, code string) (*larka
 	return resp.Data, nil
 }
 
-//func (c *LarkClient) GetChildDepartmentMap(ctx context.Context, departmentId string) (map[string]string, error) {
-//	deptMap := make(map[string]string)
-//	deptMap["d4e276efc6ac5fee"] = "上海本社"
-//	parentMap := make(map[string]string)
-//	for hasMore, pageToken := true, ""; hasMore; {
-//		getChildrenDeptReq := larkcontact.NewChildrenDepartmentReqBuilder().
-//			DepartmentId(departmentId).
-//			UserIdType("user_id").
-//			DepartmentIdType("department_id").
-//			FetchChild(true).
-//			PageToken(pageToken).
-//			PageSize(50).
-//			Build()
-//		getChildrenDeptResp, err := c.Client.Contact.Department.Children(ctx, getChildrenDeptReq)
-//		if err != nil {
-//			return nil, err
-//		}
-//		if !getChildrenDeptResp.Success() {
-//			fmt.Println(getChildrenDeptResp.Code, getChildrenDeptResp.Msg, getChildrenDeptResp.RequestId())
-//			return nil, errors.New(getChildrenDeptResp.Msg)
-//		}
-//		hasMore = *getChildrenDeptResp.Data.HasMore
-//		if hasMore {
-//			pageToken = *getChildrenDeptResp.Data.PageToken
-//		}
-//		for _, department := range getChildrenDeptResp.Data.Items {
-//			deptMap[*department.DepartmentId] = *department.Name
-//			parentMap[*department.DepartmentId] = *department.ParentDepartmentId
-//		}
-//	}
-//	deptMap = buildDeptId2PathMap(deptMap, parentMap)
-//	return deptMap, nil
-//}
+// GetApprovalDefineByCode finish
+func (c *LarkClient) GetApprovalDefineByCode(ctx context.Context, code string) (*larkapproval.GetApprovalRespData, error) {
+	req := larkapproval.NewGetApprovalReqBuilder().
+		ApprovalCode(code).
+		Locale("zh-CN").
+		WithAdminId(true).
+		UserIdType("user_id").
+		Build()
+	resp, err := c.Client.Approval.Approval.Get(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return nil, errors.New(resp.Msg)
+	}
+	return resp.Data, nil
+}
 
-//func buildPath(deptId string, deptId2NameMap map[string]string, deptId2ParentIdMap map[string]string) string {
-//	if parent, ok := deptId2ParentIdMap[deptId]; ok {
-//		return buildPath(parent, deptId2NameMap, deptId2ParentIdMap) + "-" + deptId2NameMap[deptId]
-//	}
-//	return deptId2NameMap[deptId]
-//}
+// ListApprovalInstIdByCode finish
+func (c *LarkClient) ListApprovalInstIdByCode(ctx context.Context, code, startTime, endTime string) ([]string, error) {
+	res := make([]string, 0)
+	for hasMore, pageToken := true, ""; hasMore; {
+		req := larkapproval.NewListInstanceReqBuilder().
+			ApprovalCode(code).
+			StartTime(startTime).
+			EndTime(endTime).
+			PageToken(pageToken).
+			PageSize(100).
+			Build()
+		resp, err := c.Client.Approval.Instance.List(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if !resp.Success() {
+			fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+			return nil, errors.New(resp.Msg)
+		}
+		hasMore = *resp.Data.HasMore
+		if hasMore {
+			pageToken = *resp.Data.PageToken
+		}
+		res = append(res, resp.Data.InstanceCodeList...)
+	}
+	return res, nil
+}
 
-//func buildDeptId2PathMap(deptId2NameMap map[string]string, deptId2ParentIdMap map[string]string) map[string]string {
-//	deptId2PathMap := make(map[string]string)
-//	for deptId := range deptId2NameMap {
-//		deptId2PathMap[deptId] = buildPath(deptId, deptId2NameMap, deptId2ParentIdMap)
-//	}
-//	return deptId2PathMap
-//}
-
-//func (c *LarkClient) GetDepartmentManagerByDfs(ctx context.Context, userId string) ([]string, error) {
-//	res := make([]string, 0)
-//	userInfo, err := c.GetEmpByUserId(ctx, userId)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if userInfo.SystemFields.Manager != nil {
-//		res = append(res, *userInfo.SystemFields.Manager.UserId)
-//		managers, err := c.GetDepartmentManagerByDfs(ctx, *userInfo.SystemFields.Manager.UserId)
-//		if err != nil {
-//			return nil, err
-//		}
-//		res = append(res, managers...)
-//	}
-//	return res, nil
-//}
-
-//func (c *LarkClient) ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error) {
-//	req := larkcontact.NewListFunctionalRoleMemberReqBuilder().
-//		RoleId(roleId).
-//		UserIdType(`user_id`).
-//		DepartmentIdType(`department_id`).
-//		Build()
-//	resp, err := c.Client.Contact.FunctionalRoleMember.List(ctx, req)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if !resp.Success() {
-//		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
-//		return nil, errors.New(resp.Msg)
-//	}
-//	return resp.Data.Members, nil
-//}
-
-//func (c *LarkClient) GetPMRoleByUserId(ctx context.Context, userId string) ([]string, error) {
-//	// pm_role_id: 7vb5do17annj7mr
-//	res := make([]string, 0)
-//	// 1. 获取 pm 角色下所有成员管理的 user_id 和管理范围的 department_ids
-//	roleMembers, err := c.ListRoleMember(ctx, "7vb5do17annj7mr")
-//	if err != nil {
-//		return nil, err
-//	}
-//	// 2. 获取 pm 用户的管理部门下的所有人员
-//	for _, roleMember := range roleMembers {
-//		for _, dept := range roleMember.DepartmentIds {
-//			userIds, err := c.ListUserIdByDeptId(context.Background(), dept)
-//			if err != nil {
-//				return nil, err
-//			}
-//			res = append(res, userIds...)
-//		}
-//		res = _slice.RemoveDuplication(res)
-//		// 3. 每天定时保存到数据库中
-//	}
-//	// 3. 将用户的部门列表和每个 pm 角色的部门列表做交集，判断用户是否属于该 pm 管理
-//	return res, nil
-//}
+// GetApprovalInstById finish
+func (c *LarkClient) GetApprovalInstById(ctx context.Context, instId string) (*larkapproval.GetInstanceRespData, error) {
+	req := larkapproval.NewGetInstanceReqBuilder().
+		InstanceId(instId).
+		Build()
+	resp, err := c.Client.Approval.Instance.Get(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return nil, errors.New(resp.Msg)
+	}
+	return resp.Data, nil
+}

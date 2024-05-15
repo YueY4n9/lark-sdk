@@ -30,6 +30,8 @@ GORPOXY=https://gpproxy.cn
 ## approval
 - [x] SubscribeApproval
 - [x] GetApprovalByCode
+- [x] ListApprovalInstIdByCode
+- [x] GetApprovalInstById
 
 
 - [x] GetAttachment

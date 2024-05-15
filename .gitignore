@@ -20,7 +20,7 @@
 # Go workspace file
 go.work
 
-sdk_test.go
+./sdk_test.go
 
 ./temp
 
