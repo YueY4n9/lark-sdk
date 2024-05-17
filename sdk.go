@@ -475,3 +475,26 @@ func (c *LarkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 	}
 	return resp.Data.InstanceList, nil
 }
+
+func (c *LarkClient) CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}) error {
+	bytes, err := json.Marshal(form)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	req := larkapproval.NewCreateInstanceReqBuilder().
+		InstanceCreate(larkapproval.NewInstanceCreateBuilder().
+			ApprovalCode(approvalCode).
+			UserId(userId).
+			Form(string(bytes)).
+			Build()).
+		Build()
+	resp, err := c.Client.Approval.Instance.Create(context.Background(), req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return errors.WithStack(errors.New(resp.Msg))
+	}
+	return nil
+}

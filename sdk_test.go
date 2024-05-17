@@ -13,7 +13,7 @@ import (
 )
 
 func newClient() *LarkClient {
-	return NewClient("cli_a6b488d797f8500c", "d91mgv3S0ZBVu0IKpX5vGfkiHWMACAkV")
+	return NewClient("", "")
 }
 
 func TestNewClient(t *testing.T) {
@@ -154,4 +154,13 @@ func TestLarkClient_GetApprovalDefineByCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	echo.Json(approval)
+}
+
+func TestLarkClient_CreateApprovalInst(t *testing.T) {
+	client := newClient()
+	form := []interface{}{}
+	err := client.CreateApprovalInst(context.Background(), "7A90DBE7-4244-4EA7-B880-30415D03AFB3", "3291738c", form)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
