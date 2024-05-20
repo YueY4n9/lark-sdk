@@ -227,8 +227,7 @@ func (c *LarkClient) ListUserIdByDeptId(ctx context.Context, deptId string) ([]s
 	for _, user := range users {
 		res = append(res, *user.UserId)
 	}
-	_slice.RemoveDuplication(res)
-	return res, nil
+	return _slice.RemoveDuplication(res), nil
 }
 
 // GetDeptById finish
