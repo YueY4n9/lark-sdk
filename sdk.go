@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	_map "github.com/YueY4n9/gotools/map"
 	"io"
 	"os"
 
 	"github.com/YueY4n9/gotools/echo"
+	_map "github.com/YueY4n9/gotools/map"
 	_slice "github.com/YueY4n9/gotools/slice"
 	"github.com/google/uuid"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
+	larkattendance "github.com/larksuite/oapi-sdk-go/v3/service/attendance/v1"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -452,19 +453,19 @@ func (c *LarkClient) GetApprovalInstById(ctx context.Context, instId string) (*l
 // SearchApprovalInst user_id、approval_code、instance_code、instance_external_id、group_external_id 不得均为空
 // approval_code 和 group_external_id 查询结果取并集，instance_code 和 instance_external_id 查询结果取并集，其他查询条件都对应取交集
 // 查询时间跨度不得大于30天，开始和结束时间必须都设置，或者都不设置
-func (c *LarkClient) SearchApprovalInst(ctx context.Context, userId, approvalCode, instCode string) ([]*larkapproval.InstanceSearchItem, error) {
+func (c *LarkClient) SearchApprovalInst(ctx context.Context, userId, approvalCode, instCode, instStatus, timeFrom, timeTo string) ([]*larkapproval.InstanceSearchItem, error) {
 	req := larkapproval.NewQueryInstanceReqBuilder().
 		UserIdType("user_id").
 		InstanceSearch(larkapproval.NewInstanceSearchBuilder().
 			UserId(userId).
 			ApprovalCode(approvalCode).
 			InstanceCode(instCode).
-			InstanceStatus(`PENDING`).
-			InstanceStartTimeFrom(`1547654251506`).
-			InstanceStartTimeTo(`1547654251506`).
+			InstanceStatus(instStatus).
+			InstanceStartTimeFrom(timeFrom).
+			InstanceStartTimeTo(timeTo).
 			Build()).
 		Build()
-	resp, err := c.Client.Approval.Instance.Query(context.Background(), req)
+	resp, err := c.Client.Approval.Instance.Query(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -475,6 +476,7 @@ func (c *LarkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 	return resp.Data.InstanceList, nil
 }
 
+// CreateApprovalInst finish
 func (c *LarkClient) CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}) error {
 	bytes, err := json.Marshal(form)
 	if err != nil {
@@ -487,7 +489,7 @@ func (c *LarkClient) CreateApprovalInst(ctx context.Context, approvalCode, userI
 			Form(string(bytes)).
 			Build()).
 		Build()
-	resp, err := c.Client.Approval.Instance.Create(context.Background(), req)
+	resp, err := c.Client.Approval.Instance.Create(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -496,4 +498,33 @@ func (c *LarkClient) CreateApprovalInst(ctx context.Context, approvalCode, userI
 		return errors.WithStack(errors.New(resp.Msg))
 	}
 	return nil
+}
+
+// ListAttendanceRecord dataFrom:20060102
+func (c *LarkClient) ListAttendanceRecord(ctx context.Context, userIds []string, dateFrom, dateTo int) ([]*larkattendance.UserTask, error) {
+	res := make([]*larkattendance.UserTask, 0)
+	for _, chunk := range _slice.ChunkSlice(userIds, 50) {
+		req := larkattendance.NewQueryUserTaskReqBuilder().
+			EmployeeType("employee_id").
+			IncludeTerminatedUser(false).
+			Body(larkattendance.NewQueryUserTaskReqBodyBuilder().
+				UserIds(chunk).
+				CheckDateFrom(dateFrom).
+				CheckDateTo(dateTo).
+				NeedOvertimeResult(false).
+				Build()).
+			Build()
+		resp, err := c.Client.Attendance.UserTask.Query(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if !resp.Success() {
+			fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+			return nil, errors.New(resp.Msg)
+		}
+		for _, userTask := range resp.Data.UserTaskResults {
+			res = append(res, userTask)
+		}
+	}
+	return res, nil
 }
