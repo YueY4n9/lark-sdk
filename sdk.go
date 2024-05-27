@@ -86,6 +86,32 @@ func (c *LarkClient) ListEmp(ctx context.Context, userIds []string) ([]*larkehr.
 	return res, nil
 }
 
+func (c *LarkClient) GetEmpNameMap(ctx context.Context, userIds []string) (map[string]string, error) {
+	emps := make([]*larkehr.Employee, 0)
+	for _, chunk := range _slice.ChunkSlice(userIds, 100) {
+		req := larkehr.NewListEmployeeReqBuilder().
+			View("full").
+			UserIdType("user_id").
+			UserIds(chunk).
+			Build()
+		resp, err := c.Client.Ehr.Employee.List(ctx, req)
+		if err != nil {
+			fmt.Println(err)
+			return nil, err
+		}
+		if !resp.Success() {
+			fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+			return nil, errors.New(fmt.Sprintf("%v %v %v", resp.Code, resp.Msg, resp.RequestId()))
+		}
+		emps = append(emps, resp.Data.Items...)
+	}
+	res := make(map[string]string)
+	for _, emp := range emps {
+		res[*emp.UserId] = *emp.SystemFields.Name
+	}
+	return res, nil
+}
+
 // GetAttachment finish
 func (c *LarkClient) GetAttachment(ctx context.Context, token string) error {
 	resp, err := c.Client.Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
@@ -295,7 +321,7 @@ func (c *LarkClient) ListChildDeptIdByDeptId(ctx context.Context, deptId string)
 	for _, dept := range depts {
 		res = append(res, *dept.DepartmentId)
 	}
-	return res, nil
+	return _slice.RemoveDuplication(res), nil
 }
 
 // AllEmp finish
@@ -527,4 +553,27 @@ func (c *LarkClient) ListAttendanceRecord(ctx context.Context, userIds []string,
 		}
 	}
 	return res, nil
+}
+
+// ListRoleMember finish
+func (c *LarkClient) ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error) {
+	req := larkcontact.NewListFunctionalRoleMemberReqBuilder().
+		RoleId(roleId).
+		UserIdType(`user_id`).
+		DepartmentIdType(`department_id`).
+		Build()
+	resp, err := c.Client.Contact.FunctionalRoleMember.List(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success() {
+		fmt.Println(resp.Code, resp.Msg, resp.RequestId())
+		return nil, errors.New(resp.Msg)
+	}
+	return resp.Data.Members, nil
+}
+
+// RollbackApprovalTask TODO
+func (c *LarkClient) RollbackApprovalTask(ctx context.Context, userId, taskId, reason string, defKeys []string) error {
+	return nil
 }
