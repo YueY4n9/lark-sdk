@@ -2,7 +2,7 @@ package lark_sdk
 
 import "encoding/json"
 
-func parseForm(formStr string) ([]FormWidget, error) {
+func ParseForm(formStr string) ([]FormWidget, error) {
 	res := make([]FormWidget, 0)
 	err := json.Unmarshal([]byte(formStr), &res)
 	if err != nil {
