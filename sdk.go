@@ -322,11 +322,9 @@ func (c *LarkClient) SendMsg(ctx context.Context, receiveIdType, receivedId, msg
 		Build()
 	resp, err := c.Client.Im.Message.Create(ctx, req)
 	if err != nil {
-		c.alert(err)
 		return err
 	}
 	if !resp.Success() {
-		c.alert(resp)
 		return resp
 	}
 	return nil
@@ -612,6 +610,9 @@ func (c *LarkClient) RollbackApprovalTask(ctx context.Context, currUserId, currT
 }
 
 func (c *LarkClient) alert(err error) {
+	if c.debugId == "" {
+		return
+	}
 	obj := struct {
 		AppId string `json:"appId"`
 		Err   string `json:"err"`
