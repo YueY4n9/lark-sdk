@@ -80,23 +80,9 @@ func (c *LarkClient) GetEmpByUserId(ctx context.Context, userId string) (*larkeh
 }
 
 func (c *LarkClient) GetEmpNameMap(ctx context.Context, userIds []string) (map[string]string, error) {
-	employees := make([]*larkehr.Employee, 0)
-	for _, chunk := range _slice.ChunkSlice(userIds, 100) {
-		req := larkehr.NewListEmployeeReqBuilder().
-			View("full").
-			UserIdType(UserId).
-			UserIds(chunk).
-			Build()
-		resp, err := c.Client.Ehr.Employee.List(ctx, req)
-		if err != nil {
-			c.alert(err)
-			return nil, err
-		}
-		if !resp.Success() {
-			c.alert(resp)
-			return nil, resp
-		}
-		employees = append(employees, resp.Data.Items...)
+	employees, err := c.ListEmp(ctx, userIds)
+	if err != nil {
+		return nil, err
 	}
 	res := make(map[string]string)
 	for _, emp := range employees {
@@ -135,7 +121,9 @@ func (c *LarkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 	for hasMore, pageToken := true, ""; hasMore; {
 		employeeReqBuilder := larkehr.NewListEmployeeReqBuilder().
 			View("full").
-			PageSize(100).UserIdType(UserId)
+			PageSize(100).
+			UserIdType(UserId).
+			Status([]int{2})
 		if pageToken != "" {
 			employeeReqBuilder.PageToken(pageToken)
 		}
