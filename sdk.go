@@ -12,6 +12,7 @@ import (
 	_slice "github.com/YueY4n9/gotools/slice"
 	"github.com/google/uuid"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
 	larkattendance "github.com/larksuite/oapi-sdk-go/v3/service/attendance/v1"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
@@ -597,18 +598,38 @@ func (c *LarkClient) RollbackApprovalTask(ctx context.Context, currUserId, currT
 	return nil
 }
 
+func (c *LarkClient) getAppInfo() *larkapplication.Application {
+	req := larkapplication.NewGetApplicationReqBuilder().
+		AppId(c.appId).
+		Lang(`zh_cn`).
+		Build()
+	resp, err := c.Client.Application.Application.Get(context.Background(), req)
+	if err != nil || !resp.Success() {
+		return nil
+	}
+	return resp.Data.App
+}
+
 func (c *LarkClient) alert(err error) {
 	if c.debugId == "" {
 		return
 	}
-	obj := struct {
-		AppId string `json:"appId"`
-		Err   string `json:"err"`
-	}{
-		AppId: c.appId,
-		Err:   err.Error(),
+	client := NewClient(c.debugId, c.debugSecret)
+	appInfo := c.getAppInfo()
+	appName := "未知"
+	if appInfo != nil {
+		appName = *appInfo.AppName
 	}
-	err = NewClient(c.debugId, c.debugSecret).SendCardMsg(context.Background(), UserId, "3291738c", "AAq3zkrIEYCqR", obj)
+	obj := struct {
+		AppId   string `json:"appId"`
+		AppName string `json:"app_name"`
+		Err     string `json:"err"`
+	}{
+		AppId:   c.appId,
+		AppName: appName,
+		Err:     err.Error(),
+	}
+	err = client.SendCardMsg(context.Background(), UserId, "3291738c", "AAq3zkrIEYCqR", obj)
 	if err != nil {
 		echo.Json(err)
 	}
