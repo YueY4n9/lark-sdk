@@ -21,6 +21,8 @@ import (
 )
 
 type LarkClient interface {
+	Client() *lark.Client
+
 	GetUserByUserId(ctx context.Context, userId string) (*larkcontact.User, error)
 	GetEmpByUserId(ctx context.Context, userId string) (*larkehr.Employee, error)
 	GetEmpNameMap(ctx context.Context, userIds []string) (map[string]string, error)
@@ -57,14 +59,14 @@ type larkClient struct {
 	appSecret   string
 	debugId     string
 	debugSecret string
-	Client      *lark.Client
+	client      *lark.Client
 }
 
 func NewClient(appId, appSecret string, debug ...string) LarkClient {
 	c := &larkClient{
 		appId:     appId,
 		appSecret: appSecret,
-		Client:    lark.NewClient(appId, appSecret, lark.WithEnableTokenCache(true)),
+		client:    lark.NewClient(appId, appSecret, lark.WithEnableTokenCache(true)),
 	}
 	if len(debug) == 2 {
 		c.debugId = debug[0]
@@ -73,8 +75,12 @@ func NewClient(appId, appSecret string, debug ...string) LarkClient {
 	return c
 }
 
+func (c *larkClient) Client() *lark.Client {
+	return c.client
+}
+
 func (c *larkClient) GetUserByUserId(ctx context.Context, userId string) (*larkcontact.User, error) {
-	resp, err := c.Client.Contact.User.Get(ctx, larkcontact.NewGetUserReqBuilder().
+	resp, err := c.Client().Contact.User.Get(ctx, larkcontact.NewGetUserReqBuilder().
 		UserId(userId).
 		UserIdType(UserId).
 		DepartmentIdType(DepartmentId).
@@ -95,7 +101,7 @@ func (c *larkClient) GetEmpByUserId(ctx context.Context, userId string) (*larkeh
 		UserIdType(UserId).
 		UserIds([]string{userId}).
 		Build()
-	resp, err := c.Client.Ehr.Employee.List(ctx, req)
+	resp, err := c.Client().Ehr.Employee.List(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -127,7 +133,7 @@ func (c *larkClient) ListEmp(ctx context.Context, userIds []string) ([]*larkehr.
 			UserIdType(UserId).
 			UserIds(chunk).
 			Build()
-		resp, err := c.Client.Ehr.Employee.List(ctx, req)
+		resp, err := c.Client().Ehr.Employee.List(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -152,7 +158,7 @@ func (c *larkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 			employeeReqBuilder.PageToken(pageToken)
 		}
 		req := employeeReqBuilder.Build()
-		resp, err := c.Client.Ehr.Employee.List(ctx, req)
+		resp, err := c.Client().Ehr.Employee.List(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -193,7 +199,7 @@ func (c *larkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]*la
 				PageToken(pageToken).
 				PageSize(50).
 				Build()
-			resp, err := c.Client.Contact.User.FindByDepartment(ctx, req)
+			resp, err := c.Client().Contact.User.FindByDepartment(ctx, req)
 			if err != nil {
 				c.Alert(err)
 				return nil, err
@@ -246,7 +252,7 @@ func (c *larkClient) GetDeptById(ctx context.Context, departmentId string) (*lar
 		UserIdType(`user_id`).
 		DepartmentIdType(`department_id`).
 		Build()
-	resp, err := c.Client.Contact.Department.Get(ctx, req)
+	resp, err := c.Client().Contact.Department.Get(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -273,7 +279,7 @@ func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptId string) (
 			PageToken(pageToken).
 			PageSize(50).
 			Build()
-		resp, err := c.Client.Contact.Department.Children(ctx, req)
+		resp, err := c.Client().Contact.Department.Children(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -313,7 +319,7 @@ func (c *larkClient) SendMsg(ctx context.Context, receiveIdType, receivedId, msg
 			Uuid(uuid.New().String()).
 			Build()).
 		Build()
-	resp, err := c.Client.Im.Message.Create(ctx, req)
+	resp, err := c.Client().Im.Message.Create(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -348,7 +354,7 @@ func (c *larkClient) SubscribeApproval(ctx context.Context, code string) error {
 	req := larkapproval.NewSubscribeApprovalReqBuilder().
 		ApprovalCode(code).
 		Build()
-	resp, err := c.Client.Approval.Approval.Subscribe(ctx, req)
+	resp, err := c.Client().Approval.Approval.Subscribe(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return err
@@ -366,7 +372,7 @@ func (c *larkClient) GetApprovalDefineByCode(ctx context.Context, code string) (
 		WithAdminId(true).
 		UserIdType(UserId).
 		Build()
-	resp, err := c.Client.Approval.Approval.Get(ctx, req)
+	resp, err := c.Client().Approval.Approval.Get(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -387,7 +393,7 @@ func (c *larkClient) ListApprovalInstIdByCode(ctx context.Context, code, startTi
 			PageToken(pageToken).
 			PageSize(100).
 			Build()
-		resp, err := c.Client.Approval.Instance.List(ctx, req)
+		resp, err := c.Client().Approval.Instance.List(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -408,7 +414,7 @@ func (c *larkClient) GetApprovalInstById(ctx context.Context, instId string) (*l
 	req := larkapproval.NewGetInstanceReqBuilder().
 		InstanceId(instId).
 		Build()
-	resp, err := c.Client.Approval.Instance.Get(ctx, req)
+	resp, err := c.Client().Approval.Instance.Get(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -435,7 +441,7 @@ func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 			InstanceStartTimeTo(timeTo).
 			Build()).
 		Build()
-	resp, err := c.Client.Approval.Instance.Query(ctx, req)
+	resp, err := c.Client().Approval.Instance.Query(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -458,7 +464,7 @@ func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userI
 			Form(string(bytes)).
 			Build()).
 		Build()
-	resp, err := c.Client.Approval.Instance.Create(ctx, req)
+	resp, err := c.Client().Approval.Instance.Create(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return err
@@ -470,7 +476,7 @@ func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userI
 	return nil
 }
 func (c *larkClient) GetAttachment(ctx context.Context, token string) error {
-	resp, err := c.Client.Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
+	resp, err := c.Client().Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
 		Token(token).
 		Build())
 	if err != nil {
@@ -505,7 +511,7 @@ func (c *larkClient) ListAttendanceRecord(ctx context.Context, userIds []string,
 				NeedOvertimeResult(false).
 				Build()).
 			Build()
-		resp, err := c.Client.Attendance.UserTask.Query(ctx, req)
+		resp, err := c.Client().Attendance.UserTask.Query(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -526,7 +532,7 @@ func (c *larkClient) ListRoleMember(ctx context.Context, roleId string) ([]*lark
 		UserIdType(`user_id`).
 		DepartmentIdType(`department_id`).
 		Build()
-	resp, err := c.Client.Contact.FunctionalRoleMember.List(ctx, req)
+	resp, err := c.Client().Contact.FunctionalRoleMember.List(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -547,7 +553,7 @@ func (c *larkClient) RollbackApprovalTask(ctx context.Context, currUserId, currT
 			TaskDefKeyList(defKeys).
 			Build()).
 		Build()
-	resp, err := c.Client.Approval.Instance.SpecifiedRollback(ctx, req)
+	resp, err := c.Client().Approval.Instance.SpecifiedRollback(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return err
@@ -563,7 +569,7 @@ func (c *larkClient) getAppInfo() *larkapplication.Application {
 		AppId(c.appId).
 		Lang(`zh_cn`).
 		Build()
-	resp, err := c.Client.Application.Application.Get(context.Background(), req)
+	resp, err := c.Client().Application.Application.Get(context.Background(), req)
 	if err != nil || !resp.Success() {
 		return nil
 	}
