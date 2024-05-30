@@ -51,6 +51,7 @@ type LarkClient interface {
 	GetAttachment(ctx context.Context, token string) error
 	ListAttendanceRecord(ctx context.Context, userIds []string, dateFrom, dateTo int) ([]*larkattendance.UserTask, error)
 	ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error)
+	GetAppInfo(appId string) *larkapplication.Application
 	Alert(err error)
 }
 
@@ -564,9 +565,9 @@ func (c *larkClient) RollbackApprovalTask(ctx context.Context, currUserId, currT
 	}
 	return nil
 }
-func (c *larkClient) getAppInfo() *larkapplication.Application {
+func (c *larkClient) GetAppInfo(appId string) *larkapplication.Application {
 	req := larkapplication.NewGetApplicationReqBuilder().
-		AppId(c.appId).
+		AppId(appId).
 		Lang(`zh_cn`).
 		Build()
 	resp, err := c.Client().Application.Application.Get(context.Background(), req)
@@ -580,7 +581,7 @@ func (c *larkClient) Alert(err error) {
 		return
 	}
 	client := NewClient(c.debugId, c.debugSecret)
-	appInfo := c.getAppInfo()
+	appInfo := client.GetAppInfo(c.appId)
 	appName := "未知"
 	if appInfo != nil {
 		appName = *appInfo.AppName
