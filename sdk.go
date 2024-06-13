@@ -3,9 +3,10 @@ package lark_sdk
 import (
 	"context"
 	"encoding/json"
-	"github.com/pkg/errors"
+	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/YueY4n9/gotools/echo"
 	_map "github.com/YueY4n9/gotools/map"
@@ -15,9 +16,11 @@ import (
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
 	larkattendance "github.com/larksuite/oapi-sdk-go/v3/service/attendance/v1"
+	larkcalendar "github.com/larksuite/oapi-sdk-go/v3/service/calendar/v4"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	larkvc "github.com/larksuite/oapi-sdk-go/v3/service/vc/v1"
 )
 
 type LarkClient interface {
@@ -47,6 +50,15 @@ type LarkClient interface {
 	SearchApprovalInst(ctx context.Context, userId, approvalCode, instCode, instStatus, timeFrom, timeTo string) ([]*larkapproval.InstanceSearchItem, error)
 	CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}) error
 	RollbackApprovalTask(ctx context.Context, currUserId, currTaskId, reason string, defKeys []string) error
+	AddSign(ctx context.Context, operatorId, approvalCode, instCode, taskId, comment string, addSignUserIds []string, addSignType, approvalMethod int) error
+	ApproveTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId, form string) error
+
+	ListRoom(ctx context.Context, roomLevelId string) ([]*larkvc.Room, error)
+	CheckRoomFree(ctx context.Context, roomId, timeMin, timeMax string) (bool, error)
+	SetCalendarRoom(ctx context.Context, calendarId, eventId, roomId string) error
+	SetCalendarUsers(ctx context.Context, calendarId, eventId, userId string) error
+	ListCalendarEvent(ctx context.Context, calendarId string) ([]*larkcalendar.CalendarEvent, error)
+	CreateCalendarEvent(ctx context.Context, calendarId, summary, startTs, endTs string) (*larkcalendar.CalendarEvent, error)
 
 	GetAttachment(ctx context.Context, token string) error
 	ListAttendanceRecord(ctx context.Context, userIds []string, dateFrom, dateTo int) ([]*larkattendance.UserTask, error)
@@ -81,7 +93,7 @@ func (c *larkClient) Client() *lark.Client {
 }
 
 func (c *larkClient) GetUserByUserId(ctx context.Context, userId string) (*larkcontact.User, error) {
-	resp, err := c.Client().Contact.User.Get(ctx, larkcontact.NewGetUserReqBuilder().
+	resp, err := c.client.Contact.User.Get(ctx, larkcontact.NewGetUserReqBuilder().
 		UserId(userId).
 		UserIdType(UserId).
 		DepartmentIdType(DepartmentId).
@@ -102,7 +114,7 @@ func (c *larkClient) GetEmpByUserId(ctx context.Context, userId string) (*larkeh
 		UserIdType(UserId).
 		UserIds([]string{userId}).
 		Build()
-	resp, err := c.Client().Ehr.Employee.List(ctx, req)
+	resp, err := c.client.Ehr.Employee.List(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -134,7 +146,7 @@ func (c *larkClient) ListEmp(ctx context.Context, userIds []string) ([]*larkehr.
 			UserIdType(UserId).
 			UserIds(chunk).
 			Build()
-		resp, err := c.Client().Ehr.Employee.List(ctx, req)
+		resp, err := c.client.Ehr.Employee.List(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -159,7 +171,7 @@ func (c *larkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 			employeeReqBuilder.PageToken(pageToken)
 		}
 		req := employeeReqBuilder.Build()
-		resp, err := c.Client().Ehr.Employee.List(ctx, req)
+		resp, err := c.client.Ehr.Employee.List(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -200,7 +212,7 @@ func (c *larkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]*la
 				PageToken(pageToken).
 				PageSize(50).
 				Build()
-			resp, err := c.Client().Contact.User.FindByDepartment(ctx, req)
+			resp, err := c.client.Contact.User.FindByDepartment(ctx, req)
 			if err != nil {
 				c.Alert(err)
 				return nil, err
@@ -250,10 +262,10 @@ func (c *larkClient) ListUserIdByDeptId(ctx context.Context, deptId string) ([]s
 func (c *larkClient) GetDeptById(ctx context.Context, departmentId string) (*larkcontact.Department, error) {
 	req := larkcontact.NewGetDepartmentReqBuilder().
 		DepartmentId(departmentId).
-		UserIdType(`user_id`).
+		UserIdType(UserId).
 		DepartmentIdType(`department_id`).
 		Build()
-	resp, err := c.Client().Contact.Department.Get(ctx, req)
+	resp, err := c.client.Contact.Department.Get(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -280,7 +292,7 @@ func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptId string) (
 			PageToken(pageToken).
 			PageSize(50).
 			Build()
-		resp, err := c.Client().Contact.Department.Children(ctx, req)
+		resp, err := c.client.Contact.Department.Children(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -320,7 +332,7 @@ func (c *larkClient) SendMsg(ctx context.Context, receiveIdType, receivedId, msg
 			Uuid(uuid.New().String()).
 			Build()).
 		Build()
-	resp, err := c.Client().Im.Message.Create(ctx, req)
+	resp, err := c.client.Im.Message.Create(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -355,7 +367,7 @@ func (c *larkClient) SubscribeApproval(ctx context.Context, code string) error {
 	req := larkapproval.NewSubscribeApprovalReqBuilder().
 		ApprovalCode(code).
 		Build()
-	resp, err := c.Client().Approval.Approval.Subscribe(ctx, req)
+	resp, err := c.client.Approval.Approval.Subscribe(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return err
@@ -373,7 +385,7 @@ func (c *larkClient) GetApprovalDefineByCode(ctx context.Context, code string) (
 		WithAdminId(true).
 		UserIdType(UserId).
 		Build()
-	resp, err := c.Client().Approval.Approval.Get(ctx, req)
+	resp, err := c.client.Approval.Approval.Get(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -394,7 +406,7 @@ func (c *larkClient) ListApprovalInstIdByCode(ctx context.Context, code, startTi
 			PageToken(pageToken).
 			PageSize(100).
 			Build()
-		resp, err := c.Client().Approval.Instance.List(ctx, req)
+		resp, err := c.client.Approval.Instance.List(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -415,7 +427,7 @@ func (c *larkClient) GetApprovalInstById(ctx context.Context, instId string) (*l
 	req := larkapproval.NewGetInstanceReqBuilder().
 		InstanceId(instId).
 		Build()
-	resp, err := c.Client().Approval.Instance.Get(ctx, req)
+	resp, err := c.client.Approval.Instance.Get(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -442,7 +454,7 @@ func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 			InstanceStartTimeTo(timeTo).
 			Build()).
 		Build()
-	resp, err := c.Client().Approval.Instance.Query(ctx, req)
+	resp, err := c.client.Approval.Instance.Query(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -456,7 +468,7 @@ func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}) error {
 	bytes, err := json.Marshal(form)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 	req := larkapproval.NewCreateInstanceReqBuilder().
 		InstanceCreate(larkapproval.NewInstanceCreateBuilder().
@@ -465,7 +477,7 @@ func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userI
 			Form(string(bytes)).
 			Build()).
 		Build()
-	resp, err := c.Client().Approval.Instance.Create(ctx, req)
+	resp, err := c.client.Approval.Instance.Create(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return err
@@ -477,7 +489,7 @@ func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userI
 	return nil
 }
 func (c *larkClient) GetAttachment(ctx context.Context, token string) error {
-	resp, err := c.Client().Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
+	resp, err := c.client.Ehr.Attachment.Get(ctx, larkehr.NewGetAttachmentReqBuilder().
 		Token(token).
 		Build())
 	if err != nil {
@@ -512,7 +524,7 @@ func (c *larkClient) ListAttendanceRecord(ctx context.Context, userIds []string,
 				NeedOvertimeResult(false).
 				Build()).
 			Build()
-		resp, err := c.Client().Attendance.UserTask.Query(ctx, req)
+		resp, err := c.client.Attendance.UserTask.Query(ctx, req)
 		if err != nil {
 			c.Alert(err)
 			return nil, err
@@ -530,10 +542,10 @@ func (c *larkClient) ListAttendanceRecord(ctx context.Context, userIds []string,
 func (c *larkClient) ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error) {
 	req := larkcontact.NewListFunctionalRoleMemberReqBuilder().
 		RoleId(roleId).
-		UserIdType(`user_id`).
+		UserIdType(UserId).
 		DepartmentIdType(`department_id`).
 		Build()
-	resp, err := c.Client().Contact.FunctionalRoleMember.List(ctx, req)
+	resp, err := c.client.Contact.FunctionalRoleMember.List(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -554,7 +566,7 @@ func (c *larkClient) RollbackApprovalTask(ctx context.Context, currUserId, currT
 			TaskDefKeyList(defKeys).
 			Build()).
 		Build()
-	resp, err := c.Client().Approval.Instance.SpecifiedRollback(ctx, req)
+	resp, err := c.client.Approval.Instance.SpecifiedRollback(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return err
@@ -570,7 +582,7 @@ func (c *larkClient) GetAppInfo(appId string) *larkapplication.Application {
 		AppId(appId).
 		Lang(`zh_cn`).
 		Build()
-	resp, err := c.Client().Application.Application.Get(context.Background(), req)
+	resp, err := c.client.Application.Application.Get(context.Background(), req)
 	if err != nil || !resp.Success() {
 		return nil
 	}
@@ -599,4 +611,200 @@ func (c *larkClient) Alert(err error) {
 	if err != nil {
 		echo.Json(err)
 	}
+}
+
+func (c *larkClient) AddSign(ctx context.Context, operatorId, approvalCode, instCode, taskId, comment string, addSignUserIds []string, addSignType, approvalMethod int) error {
+	req := larkapproval.NewAddSignInstanceReqBuilder().
+		Body(larkapproval.NewAddSignInstanceReqBodyBuilder().
+			UserId(operatorId).
+			ApprovalCode(approvalCode).
+			InstanceCode(instCode).
+			TaskId(taskId).
+			Comment(comment).
+			AddSignUserIds(addSignUserIds).
+			AddSignType(addSignType).
+			ApprovalMethod(approvalMethod).
+			Build()).
+		Build()
+	resp, err := c.client.Approval.V4.Instance.AddSign(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(err)
+		return resp
+	}
+	return nil
+}
+func (c *larkClient) ApproveTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId, form string) error {
+	req := larkapproval.NewApproveTaskReqBuilder().
+		TaskApprove(larkapproval.NewTaskApproveBuilder().
+			ApprovalCode(approvalCode).
+			InstanceCode(instCode).
+			UserId(userId).
+			Comment(comment).
+			TaskId(taskId).
+			Form(form).
+			Build()).
+		Build()
+	resp, err := c.client.Approval.Task.Approve(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(err)
+		return resp
+	}
+	return nil
+}
+func (c *larkClient) ListRoom(ctx context.Context, roomLevelId string) ([]*larkvc.Room, error) {
+	res := make([]*larkvc.Room, 0)
+	req := larkvc.NewListRoomReqBuilder().
+		UserIdType(UserId).
+		RoomLevelId(roomLevelId).
+		PageSize(100).
+		Build()
+	resp, err := c.client.Vc.Room.List(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return nil, resp
+	}
+	for _, room := range resp.Data.Rooms {
+		res = append(res, room)
+	}
+	return res, nil
+}
+func (c *larkClient) CheckRoomFree(ctx context.Context, roomId, timeMin, timeMax string) (bool, error) {
+	req := larkcalendar.NewListFreebusyReqBuilder().
+		UserIdType(UserId).
+		Body(larkcalendar.NewListFreebusyReqBodyBuilder().
+			TimeMin(timeMin).
+			TimeMax(timeMax).
+			RoomId(roomId).
+			Build()).
+		Build()
+	resp, err := c.client.Calendar.Freebusy.List(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return false, err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return false, resp
+	}
+	if len(resp.Data.FreebusyList) == 0 {
+		return true, nil
+	}
+	echo.Json(resp.Data.FreebusyList)
+	return false, nil
+}
+func (c *larkClient) SetCalendarRoom(ctx context.Context, calendarId, eventId, roomId string) error {
+	req := larkcalendar.NewCreateCalendarEventAttendeeReqBuilder().
+		CalendarId(calendarId).
+		EventId(eventId).
+		UserIdType(UserId).
+		Body(larkcalendar.NewCreateCalendarEventAttendeeReqBodyBuilder().
+			Attendees([]*larkcalendar.CalendarEventAttendee{
+				larkcalendar.NewCalendarEventAttendeeBuilder().
+					Type(`resource`).
+					RoomId(roomId).
+					ApprovalReason("会议室申请嘻嘻").
+					Build(),
+			}).
+			NeedNotification(true).
+			IsEnableAdmin(false).
+			AddOperatorToAttendee(false).
+			Build()).
+		Build()
+	resp, err := c.client.Calendar.CalendarEventAttendee.Create(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return resp
+	}
+	return nil
+}
+func (c *larkClient) SetCalendarUsers(ctx context.Context, calendarId, eventId, userId string) error {
+	req := larkcalendar.NewCreateCalendarEventAttendeeReqBuilder().
+		CalendarId(calendarId).
+		EventId(eventId).
+		UserIdType(UserId).
+		Body(larkcalendar.NewCreateCalendarEventAttendeeReqBodyBuilder().
+			Attendees([]*larkcalendar.CalendarEventAttendee{
+				larkcalendar.NewCalendarEventAttendeeBuilder().
+					Type(User).
+					UserId(userId).
+					Build(),
+			}).
+			AddOperatorToAttendee(false).
+			Build()).
+		Build()
+	resp, err := c.client.Calendar.CalendarEventAttendee.Create(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return resp
+	}
+	return nil
+}
+func (c *larkClient) ListCalendarEvent(ctx context.Context, calendarId string) ([]*larkcalendar.CalendarEvent, error) {
+	now := time.Now()
+	zeroTime := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	req := larkcalendar.NewListCalendarEventReqBuilder().
+		CalendarId(calendarId).
+		PageSize(500).
+		StartTime(fmt.Sprint(zeroTime.Unix())).
+		UserIdType(UserId).
+		Build()
+	resp, err := c.client.Calendar.CalendarEvent.List(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return nil, resp
+	}
+	return resp.Data.Items, nil
+}
+func (c *larkClient) CreateCalendarEvent(ctx context.Context, calendarId, summary, startTs, endTs string) (*larkcalendar.CalendarEvent, error) {
+	req := larkcalendar.NewCreateCalendarEventReqBuilder().
+		CalendarId(calendarId).
+		UserIdType(UserId).
+		CalendarEvent(larkcalendar.NewCalendarEventBuilder().
+			Summary(summary).
+			Description("").
+			NeedNotification(false).
+			StartTime(larkcalendar.NewTimeInfoBuilder().
+				Timestamp(startTs).
+				Build()).
+			EndTime(larkcalendar.NewTimeInfoBuilder().
+				Timestamp(endTs).
+				Build()).
+			AttendeeAbility(`can_invite_others`).
+			Color(-1).
+			Build()).
+		Build()
+	resp, err := c.client.Calendar.CalendarEvent.Create(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return nil, resp
+	}
+	return resp.Data.Event, nil
 }
