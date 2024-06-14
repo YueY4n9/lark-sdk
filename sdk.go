@@ -56,7 +56,7 @@ type LarkClient interface {
 	ListRoom(ctx context.Context, roomLevelId string) ([]*larkvc.Room, error)
 	CheckRoomFree(ctx context.Context, roomId, timeMin, timeMax string) (bool, error)
 	SetCalendarRoom(ctx context.Context, calendarId, eventId, roomId string) error
-	SetCalendarUsers(ctx context.Context, calendarId, eventId, userId string) error
+	SetCalendarUsers(ctx context.Context, calendarId, eventId string, userIds []string) error
 	ListCalendarEvent(ctx context.Context, calendarId string) ([]*larkcalendar.CalendarEvent, error)
 	CreateCalendarEvent(ctx context.Context, calendarId, summary, startTs, endTs string) (*larkcalendar.CalendarEvent, error)
 
@@ -733,18 +733,17 @@ func (c *larkClient) SetCalendarRoom(ctx context.Context, calendarId, eventId, r
 	}
 	return nil
 }
-func (c *larkClient) SetCalendarUsers(ctx context.Context, calendarId, eventId, userId string) error {
+func (c *larkClient) SetCalendarUsers(ctx context.Context, calendarId, eventId string, userIds []string) error {
+	attendees := make([]*larkcalendar.CalendarEventAttendee, 0)
+	for _, userId := range userIds {
+		attendees = append(attendees, larkcalendar.NewCalendarEventAttendeeBuilder().Type(User).UserId(userId).Build())
+	}
 	req := larkcalendar.NewCreateCalendarEventAttendeeReqBuilder().
 		CalendarId(calendarId).
 		EventId(eventId).
 		UserIdType(UserId).
 		Body(larkcalendar.NewCreateCalendarEventAttendeeReqBodyBuilder().
-			Attendees([]*larkcalendar.CalendarEventAttendee{
-				larkcalendar.NewCalendarEventAttendeeBuilder().
-					Type(User).
-					UserId(userId).
-					Build(),
-			}).
+			Attendees(attendees).
 			AddOperatorToAttendee(false).
 			Build()).
 		Build()
