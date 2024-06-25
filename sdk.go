@@ -21,6 +21,7 @@ import (
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkvc "github.com/larksuite/oapi-sdk-go/v3/service/vc/v1"
+	"github.com/pkg/errors"
 )
 
 type LarkClient interface {
@@ -318,6 +319,9 @@ func (c *larkClient) ListChildDeptIdByDeptId(ctx context.Context, deptId string)
 		return nil, err
 	}
 	for _, dept := range depts {
+		if dept.DepartmentId == nil {
+			return nil, errors.New("DepartmentId is nil")
+		}
 		res = append(res, *dept.DepartmentId)
 	}
 	return _slice.RemoveDuplication(res), nil

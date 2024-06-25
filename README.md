@@ -43,3 +43,7 @@ GORPOXY=https://gpproxy.cn
 
 # TODO list
 
+
+# approval url
+
+https://applink.feishu.cn/client/mini_program/open?appId=cli_9cb844403dbb9108&mode=appCenter&path=pc/pages/in-process/index?instanceId=xxx
