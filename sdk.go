@@ -16,6 +16,8 @@ import (
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
 	larkattendance "github.com/larksuite/oapi-sdk-go/v3/service/attendance/v1"
+	larkauthen "github.com/larksuite/oapi-sdk-go/v3/service/authen/v1"
+	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 	larkcalendar "github.com/larksuite/oapi-sdk-go/v3/service/calendar/v4"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
@@ -26,6 +28,8 @@ import (
 
 type LarkClient interface {
 	Client() *lark.Client
+
+	GetUserAccessToken(ctx context.Context, code string) (string, error)
 
 	GetUserByUserId(ctx context.Context, userId string) (*larkcontact.User, error)
 	GetEmpByUserId(ctx context.Context, userId string) (*larkehr.Employee, error)
@@ -38,8 +42,8 @@ type LarkClient interface {
 	ListUserIdByDeptId(ctx context.Context, deptId string) ([]string, error)
 
 	GetDeptById(ctx context.Context, departmentId string) (*larkcontact.Department, error)
-	ListChildDeptByDeptId(ctx context.Context, deptId string) ([]*larkcontact.Department, error)
-	ListChildDeptIdByDeptId(ctx context.Context, deptId string) ([]string, error)
+	ListChildDeptByDeptId(ctx context.Context, deptIdType string, deptId string) ([]*larkcontact.Department, error)
+	ListChildDeptIdByDeptId(ctx context.Context, deptIdType string, deptId string) ([]string, error)
 
 	SendMsg(ctx context.Context, receiveIdType, receivedId, msgType, content string) error
 	SendCardMsg(ctx context.Context, receiveIdType, receivedId, cardId string, templateVar interface{}) error
@@ -53,6 +57,7 @@ type LarkClient interface {
 	RollbackApprovalTask(ctx context.Context, currUserId, currTaskId, reason string, defKeys []string) error
 	AddSign(ctx context.Context, operatorId, approvalCode, instCode, taskId, comment string, addSignUserIds []string, addSignType, approvalMethod int) error
 	ApproveTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId, form string) error
+	CcApprovalInst(ctx context.Context, approvalCode, instCode, fromUserId, comment string, ccUserIds []string) error
 
 	ListRoom(ctx context.Context, roomLevelId string) ([]*larkvc.Room, error)
 	CheckRoomFree(ctx context.Context, roomId, timeMin, timeMax string) (bool, error)
@@ -200,7 +205,7 @@ func (c *larkClient) AllUser(ctx context.Context) ([]*larkcontact.User, error) {
 }
 func (c *larkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]*larkcontact.User, error) {
 	res := make([]*larkcontact.User, 0)
-	deptIds, err := c.ListChildDeptIdByDeptId(ctx, deptId)
+	deptIds, err := c.ListChildDeptIdByDeptId(ctx, DepartmentId, deptId)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +282,7 @@ func (c *larkClient) GetDeptById(ctx context.Context, departmentId string) (*lar
 	}
 	return resp.Data.Department, nil
 }
-func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptId string) ([]*larkcontact.Department, error) {
+func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptIdType string, deptId string) ([]*larkcontact.Department, error) {
 	res := make([]*larkcontact.Department, 0)
 	deptInfo, err := c.GetDeptById(ctx, deptId)
 	if err != nil {
@@ -288,7 +293,7 @@ func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptId string) (
 		req := larkcontact.NewChildrenDepartmentReqBuilder().
 			DepartmentId(deptId).
 			UserIdType(UserId).
-			DepartmentIdType(DepartmentId).
+			DepartmentIdType(deptIdType).
 			FetchChild(true).
 			PageToken(pageToken).
 			PageSize(50).
@@ -312,9 +317,9 @@ func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptId string) (
 	}
 	return res, nil
 }
-func (c *larkClient) ListChildDeptIdByDeptId(ctx context.Context, deptId string) ([]string, error) {
+func (c *larkClient) ListChildDeptIdByDeptId(ctx context.Context, deptIdType string, deptId string) ([]string, error) {
 	res := make([]string, 0)
-	depts, err := c.ListChildDeptByDeptId(ctx, deptId)
+	depts, err := c.ListChildDeptByDeptId(ctx, deptIdType, deptId)
 	if err != nil {
 		return nil, err
 	}
@@ -447,27 +452,39 @@ func (c *larkClient) GetApprovalInstById(ctx context.Context, instId string) (*l
 // approval_code 和 group_external_id 查询结果取并集，instance_code 和 instance_external_id 查询结果取并集，其他查询条件都对应取交集
 // 查询时间跨度不得大于30天，开始和结束时间必须都设置，或者都不设置
 func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCode, instCode, instStatus, timeFrom, timeTo string) ([]*larkapproval.InstanceSearchItem, error) {
-	req := larkapproval.NewQueryInstanceReqBuilder().
-		UserIdType(UserId).
-		InstanceSearch(larkapproval.NewInstanceSearchBuilder().
-			UserId(userId).
-			ApprovalCode(approvalCode).
-			InstanceCode(instCode).
-			InstanceStatus(instStatus).
-			InstanceStartTimeFrom(timeFrom).
-			InstanceStartTimeTo(timeTo).
-			Build()).
-		Build()
-	resp, err := c.client.Approval.Instance.Query(ctx, req)
-	if err != nil {
-		c.Alert(err)
-		return nil, err
+	res := make([]*larkapproval.InstanceSearchItem, 0)
+	for hasMore, pageToken := true, ""; hasMore; {
+		req := larkapproval.NewQueryInstanceReqBuilder().
+			UserIdType(UserId).
+			PageToken(pageToken).
+			PageSize(200).
+			InstanceSearch(larkapproval.NewInstanceSearchBuilder().
+				UserId(userId).
+				ApprovalCode(approvalCode).
+				InstanceCode(instCode).
+				InstanceStatus(instStatus).
+				InstanceStartTimeFrom(timeFrom).
+				InstanceStartTimeTo(timeTo).
+				Build()).
+			Build()
+		resp, err := c.client.Approval.Instance.Query(ctx, req)
+		if err != nil {
+			c.Alert(err)
+			return nil, err
+		}
+		if !resp.Success() {
+			c.Alert(resp)
+			return nil, resp
+		}
+		hasMore = *resp.Data.HasMore
+		if hasMore {
+			pageToken = *resp.Data.PageToken
+		}
+		for _, item := range resp.Data.InstanceList {
+			res = append(res, item)
+		}
 	}
-	if !resp.Success() {
-		c.Alert(resp)
-		return nil, resp
-	}
-	return resp.Data.InstanceList, nil
+	return res, nil
 }
 func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}) error {
 	bytes, err := json.Marshal(form)
@@ -584,6 +601,7 @@ func (c *larkClient) RollbackApprovalTask(ctx context.Context, currUserId, currT
 func (c *larkClient) GetAppInfo(appId string) *larkapplication.Application {
 	req := larkapplication.NewGetApplicationReqBuilder().
 		AppId(appId).
+		UserIdType(UserId).
 		Lang(`zh_cn`).
 		Build()
 	resp, err := c.client.Application.Application.Get(context.Background(), req)
@@ -810,4 +828,72 @@ func (c *larkClient) CreateCalendarEvent(ctx context.Context, calendarId, summar
 		return nil, resp
 	}
 	return resp.Data.Event, nil
+}
+func (c *larkClient) CcApprovalInst(ctx context.Context, approvalCode, instCode, fromUserId, comment string, ccUserIds []string) error {
+	req := larkapproval.NewCcInstanceReqBuilder().
+		UserIdType(UserId).
+		InstanceCc(larkapproval.NewInstanceCcBuilder().
+			ApprovalCode(approvalCode).
+			InstanceCode(instCode).
+			UserId(fromUserId).
+			CcUserIds(ccUserIds).
+			Comment(comment).
+			Build()).
+		Build()
+	resp, err := c.client.Approval.Instance.Cc(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(err)
+		return resp
+	}
+	c.Alert(errors.Errorf("instCode: %v from: %v cc: %v", instCode, fromUserId, ccUserIds))
+	return nil
+}
+
+func (c *larkClient) SearchAppTableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, info *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error) {
+	req := larkbitable.NewSearchAppTableRecordReqBuilder().
+		AppToken(appToken).
+		TableId(tableId).
+		PageSize(500).
+		Body(larkbitable.NewSearchAppTableRecordReqBodyBuilder().
+			FieldNames(fieldNames).
+			Filter(info).
+			AutomaticFields(false).
+			Build()).
+		Build()
+	resp, err := c.client.Bitable.AppTableRecord.Search(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success() {
+		return nil, resp
+	}
+	return resp.Data.Items, nil
+}
+func (c *larkClient) GetUserAccessToken(ctx context.Context, code string) (string, error) {
+	req := larkauthen.NewCreateOidcAccessTokenReqBuilder().
+		Body(larkauthen.NewCreateOidcAccessTokenReqBodyBuilder().
+			GrantType(`authorization_code`).
+			Code(code).
+			Build()).
+		Build()
+	resp, err := c.client.Authen.OidcAccessToken.Create(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	if !resp.Success() {
+		return "", resp
+	}
+	return *resp.Data.AccessToken, nil
+}
+
+//func (c *larkClient) ListApp(ctx context.Context) (string, error) {
+//	c.client.Application.ApplicationAppUsage.DepartmentOverview()
+//}
+
+func stackErr(err error) error {
+	return errors.WithStack(err)
 }
