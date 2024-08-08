@@ -41,7 +41,7 @@ type LarkClient interface {
 	AllUserId(ctx context.Context) ([]string, error)
 	ListUserIdByDeptId(ctx context.Context, deptId string) ([]string, error)
 
-	GetDeptById(ctx context.Context, departmentId string) (*larkcontact.Department, error)
+	GetDeptById(ctx context.Context, deptIdType, deptId string) (*larkcontact.Department, error)
 	ListChildDeptByDeptId(ctx context.Context, deptIdType string, deptId string) ([]*larkcontact.Department, error)
 	ListChildDeptIdByDeptId(ctx context.Context, deptIdType string, deptId string) ([]string, error)
 
@@ -265,11 +265,11 @@ func (c *larkClient) ListUserIdByDeptId(ctx context.Context, deptId string) ([]s
 	}
 	return _slice.RemoveDuplication(res), nil
 }
-func (c *larkClient) GetDeptById(ctx context.Context, departmentId string) (*larkcontact.Department, error) {
+func (c *larkClient) GetDeptById(ctx context.Context, deptIdType, deptId string) (*larkcontact.Department, error) {
 	req := larkcontact.NewGetDepartmentReqBuilder().
-		DepartmentId(departmentId).
+		DepartmentId(deptId).
 		UserIdType(UserId).
-		DepartmentIdType(`department_id`).
+		DepartmentIdType(deptIdType).
 		Build()
 	resp, err := c.client.Contact.Department.Get(ctx, req)
 	if err != nil {
@@ -284,7 +284,7 @@ func (c *larkClient) GetDeptById(ctx context.Context, departmentId string) (*lar
 }
 func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptIdType string, deptId string) ([]*larkcontact.Department, error) {
 	res := make([]*larkcontact.Department, 0)
-	deptInfo, err := c.GetDeptById(ctx, deptId)
+	deptInfo, err := c.GetDeptById(ctx, deptIdType, deptId)
 	if err != nil {
 		return nil, err
 	}
