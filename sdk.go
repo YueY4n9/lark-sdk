@@ -22,8 +22,15 @@ import (
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	larksecurity_and_compliance "github.com/larksuite/oapi-sdk-go/v3/service/security_and_compliance/v1"
 	larkvc "github.com/larksuite/oapi-sdk-go/v3/service/vc/v1"
+	larkwiki "github.com/larksuite/oapi-sdk-go/v3/service/wiki/v2"
 	"github.com/pkg/errors"
+)
+
+const (
+	macRetry  int           = 3
+	sleepTime time.Duration = 5 * time.Second
 )
 
 type LarkClient interface {
@@ -31,6 +38,7 @@ type LarkClient interface {
 
 	GetUserAccessToken(ctx context.Context, code string) (string, error)
 
+	// 用户
 	GetUserByUserId(ctx context.Context, userId string) (*larkcontact.User, error)
 	GetEmpByUserId(ctx context.Context, userId string) (*larkehr.Employee, error)
 	GetEmpNameMap(ctx context.Context, userIds []string) (map[string]string, error)
@@ -41,13 +49,17 @@ type LarkClient interface {
 	AllUserId(ctx context.Context) ([]string, error)
 	ListUserIdByDeptId(ctx context.Context, deptId string) ([]string, error)
 
+	// 部门
 	GetDeptById(ctx context.Context, deptIdType, deptId string) (*larkcontact.Department, error)
 	ListChildDeptByDeptId(ctx context.Context, deptIdType string, deptId string) ([]*larkcontact.Department, error)
 	ListChildDeptIdByDeptId(ctx context.Context, deptIdType string, deptId string) ([]string, error)
+	ListParentDeptByDeptId(ctx context.Context, deptIdType string, deptId string) ([]*larkcontact.Department, error)
 
+	// 消息
 	SendMsg(ctx context.Context, receiveIdType, receivedId, msgType, content string) error
 	SendCardMsg(ctx context.Context, receiveIdType, receivedId, cardId string, templateVar interface{}) error
 
+	// 审批
 	SubscribeApproval(ctx context.Context, code string) error
 	GetApprovalDefineByCode(ctx context.Context, code string) (*larkapproval.GetApprovalRespData, error)
 	ListApprovalInstIdByCode(ctx context.Context, code, startTime, endTime string) ([]string, error)
@@ -58,7 +70,9 @@ type LarkClient interface {
 	AddSign(ctx context.Context, operatorId, approvalCode, instCode, taskId, comment string, addSignUserIds []string, addSignType, approvalMethod int) error
 	ApproveTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId, form string) error
 	CcApprovalInst(ctx context.Context, approvalCode, instCode, fromUserId, comment string, ccUserIds []string) error
+	AddInstComment(ctx context.Context, instCode, userId, comment string) error
 
+	// 会议室
 	ListRoom(ctx context.Context, roomLevelId string) ([]*larkvc.Room, error)
 	CheckRoomFree(ctx context.Context, roomId, timeMin, timeMax string) (bool, error)
 	SetCalendarRoom(ctx context.Context, calendarId, eventId, roomId string) error
@@ -66,10 +80,20 @@ type LarkClient interface {
 	ListCalendarEvent(ctx context.Context, calendarId string) ([]*larkcalendar.CalendarEvent, error)
 	CreateCalendarEvent(ctx context.Context, calendarId, summary, startTs, endTs string) (*larkcalendar.CalendarEvent, error)
 
+	// 云文档
+	GetSpaceNode(ctx context.Context, objType, token string) (*larkwiki.Node, error)
+	ListBitableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, sort []*larkbitable.Sort, filter *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error)
+	InsertBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error
+	InsertBitable1Record(ctx context.Context, appToken, tableId string, record *larkbitable.AppTableRecord) error
+	UpdateBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error
+
+	// 其他
 	GetAttachment(ctx context.Context, token string) error
 	ListAttendanceRecord(ctx context.Context, userIds []string, dateFrom, dateTo int) ([]*larkattendance.UserTask, error)
 	ListRoleMember(ctx context.Context, roleId string) ([]*larkcontact.FunctionalRoleMember, error)
 	GetAppInfo(appId string) *larkapplication.Application
+	AddAttendanceFlow(ctx context.Context, userId, locationName, checkTime string) error
+	GetLog(ctx context.Context, appId, apiKey string) ([]*larksecurity_and_compliance.OpenapiLog, error)
 	Alert(err error)
 }
 
@@ -134,6 +158,7 @@ func (c *larkClient) GetEmpByUserId(ctx context.Context, userId string) (*larkeh
 func (c *larkClient) GetEmpNameMap(ctx context.Context, userIds []string) (map[string]string, error) {
 	employees, err := c.ListEmp(ctx, userIds)
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
 	res := make(map[string]string)
@@ -196,25 +221,34 @@ func (c *larkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 	}
 	return res, nil
 }
-func (c *larkClient) AllUser(ctx context.Context) ([]*larkcontact.User, error) {
-	res, err := c.ListUserByDeptId(ctx, "0")
-	if err != nil {
-		return nil, err
+func (c *larkClient) AllUser(ctx context.Context) (res []*larkcontact.User, err error) {
+	startTime := time.Now()
+	for i := 0; i < macRetry; i++ {
+		res, err = c.ListUserByDeptId(ctx, "0")
+		if err == nil {
+			break
+		} else {
+			c.Alert(err)
+			time.Sleep(sleepTime)
+		}
 	}
-	return res, nil
+	endTime := time.Now()
+	echo.Json(endTime.Sub(startTime).String())
+	return res, err
 }
 func (c *larkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]*larkcontact.User, error) {
 	res := make([]*larkcontact.User, 0)
-	deptIds, err := c.ListChildDeptIdByDeptId(ctx, DepartmentId, deptId)
+	childDeptIds, err := c.ListChildDeptIdByDeptId(ctx, DepartmentId, deptId)
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
-	for _, deptId := range deptIds {
+	for _, childDeptId := range childDeptIds {
 		for hasMore, pageToken := true, ""; hasMore; {
 			req := larkcontact.NewFindByDepartmentUserReqBuilder().
 				UserIdType(UserId).
 				DepartmentIdType(DepartmentId).
-				DepartmentId(deptId).
+				DepartmentId(childDeptId).
 				PageToken(pageToken).
 				PageSize(50).
 				Build()
@@ -247,6 +281,7 @@ func (c *larkClient) AllUserId(ctx context.Context) ([]string, error) {
 	userIds := make([]string, 0)
 	allEmp, err := c.AllEmp(ctx)
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
 	for _, emp := range allEmp {
@@ -258,6 +293,7 @@ func (c *larkClient) ListUserIdByDeptId(ctx context.Context, deptId string) ([]s
 	res := make([]string, 0)
 	users, err := c.ListUserByDeptId(ctx, deptId)
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
 	for _, user := range users {
@@ -455,16 +491,16 @@ func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 	res := make([]*larkapproval.InstanceSearchItem, 0)
 	for hasMore, pageToken := true, ""; hasMore; {
 		req := larkapproval.NewQueryInstanceReqBuilder().
-			UserIdType(UserId).
-			PageToken(pageToken).
 			PageSize(200).
+			PageToken(pageToken).
+			UserIdType(UserId).
 			InstanceSearch(larkapproval.NewInstanceSearchBuilder().
-				UserId(userId).
 				ApprovalCode(approvalCode).
-				InstanceCode(instCode).
 				InstanceStatus(instStatus).
 				InstanceStartTimeFrom(timeFrom).
 				InstanceStartTimeTo(timeTo).
+				UserId(userId).
+				Locale(`zh-CN`).
 				Build()).
 			Build()
 		resp, err := c.client.Approval.Instance.Query(ctx, req)
@@ -852,6 +888,27 @@ func (c *larkClient) CcApprovalInst(ctx context.Context, approvalCode, instCode,
 	c.Alert(errors.Errorf("instCode: %v from: %v cc: %v", instCode, fromUserId, ccUserIds))
 	return nil
 }
+func (c *larkClient) AddInstComment(ctx context.Context, instCode, userId, comment string) error {
+	req := larkapproval.NewCreateInstanceCommentReqBuilder().
+		InstanceId(instCode).
+		UserIdType(UserId).
+		UserId(userId).
+		CommentRequest(larkapproval.NewCommentRequestBuilder().
+			Content(comment).
+			DisableBot(true).
+			Build()).
+		Build()
+	resp, err := c.client.Approval.InstanceComment.Create(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return resp
+	}
+	return nil
+}
 
 func (c *larkClient) SearchAppTableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, info *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error) {
 	req := larkbitable.NewSearchAppTableRecordReqBuilder().
@@ -869,6 +926,7 @@ func (c *larkClient) SearchAppTableRecord(ctx context.Context, appToken, tableId
 		return nil, err
 	}
 	if !resp.Success() {
+		c.Alert(resp)
 		return nil, resp
 	}
 	return resp.Data.Items, nil
@@ -882,18 +940,211 @@ func (c *larkClient) GetUserAccessToken(ctx context.Context, code string) (strin
 		Build()
 	resp, err := c.client.Authen.OidcAccessToken.Create(ctx, req)
 	if err != nil {
+		c.Alert(err)
 		return "", err
 	}
 	if !resp.Success() {
+		c.Alert(resp)
 		return "", resp
 	}
 	return *resp.Data.AccessToken, nil
 }
+func (c *larkClient) AddAttendanceFlow(ctx context.Context, userId, locationName, checkTime string) error {
+	req := larkattendance.NewBatchCreateUserFlowReqBuilder().
+		EmployeeType(`employee_id`).
+		Body(larkattendance.NewBatchCreateUserFlowReqBodyBuilder().
+			FlowRecords([]*larkattendance.UserFlow{
+				larkattendance.NewUserFlowBuilder().
+					UserId(userId).
+					CreatorId(userId).
+					LocationName(locationName).
+					CheckTime(checkTime).
+					Comment("").
+					Build(),
+			}).
+			Build()).
+		Build()
+	resp, err := c.client.Attendance.UserFlow.BatchCreate(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return resp
+	}
+	return nil
+}
 
-//func (c *larkClient) ListApp(ctx context.Context) (string, error) {
-//	c.client.Application.ApplicationAppUsage.DepartmentOverview()
-//}
+func (c *larkClient) ListBitableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, sort []*larkbitable.Sort, filter *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error) {
+	res := make([]*larkbitable.AppTableRecord, 0)
+	for hasMore, pageToken := true, ""; hasMore; {
+		req := larkbitable.NewSearchAppTableRecordReqBuilder().
+			AppToken(appToken).
+			TableId(tableId).
+			UserIdType(UserId).
+			PageSize(500).
+			PageToken(pageToken).
+			Body(larkbitable.NewSearchAppTableRecordReqBodyBuilder().
+				FieldNames(fieldNames).
+				Sort(sort).
+				Filter(filter).
+				Build()).
+			Build()
+		resp, err := c.client.Bitable.AppTableRecord.Search(ctx, req)
+		if err != nil {
+			c.Alert(err)
+			return nil, err
+		}
+		if !resp.Success() {
+			c.Alert(resp)
+			return nil, resp
+		}
+		hasMore = *resp.Data.HasMore
+		if hasMore {
+			pageToken = *resp.Data.PageToken
+		}
+		for _, item := range resp.Data.Items {
+			res = append(res, item)
+		}
+	}
+	return res, nil
+}
+
+func (c *larkClient) InsertBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error {
+	for _, chunk := range _slice.ChunkSlice(records, 500) {
+		req := larkbitable.NewBatchCreateAppTableRecordReqBuilder().
+			AppToken(appToken).
+			TableId(tableId).
+			UserIdType(UserId).
+			Body(larkbitable.NewBatchCreateAppTableRecordReqBodyBuilder().
+				Records(chunk).
+				Build()).
+			Build()
+		resp, err := c.client.Bitable.AppTableRecord.BatchCreate(ctx, req)
+		if err != nil {
+			c.Alert(err)
+			return err
+		}
+		if !resp.Success() {
+			c.Alert(resp)
+			return resp
+		}
+	}
+	return nil
+}
+
+func (c *larkClient) InsertBitable1Record(ctx context.Context, appToken, tableId string, record *larkbitable.AppTableRecord) error {
+	req := larkbitable.NewCreateAppTableRecordReqBuilder().
+		AppToken(appToken).
+		TableId(tableId).
+		UserIdType(UserId).AppTableRecord(record).
+		Build()
+	resp, err := c.client.Bitable.AppTableRecord.Create(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return resp
+	}
+	return nil
+}
+
+func (c *larkClient) UpdateBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error {
+	for _, chunk := range _slice.ChunkSlice(records, 500) {
+		req := larkbitable.NewBatchUpdateAppTableRecordReqBuilder().
+			AppToken(appToken).
+			TableId(tableId).
+			UserIdType(UserId).
+			Body(larkbitable.NewBatchUpdateAppTableRecordReqBodyBuilder().
+				Records(chunk).
+				Build()).
+			Build()
+		resp, err := c.client.Bitable.AppTableRecord.BatchUpdate(ctx, req)
+		if err != nil {
+			c.Alert(err)
+			return err
+		}
+		if !resp.Success() {
+			c.Alert(resp)
+			return resp
+		}
+	}
+	return nil
+}
+
+func (c *larkClient) GetSpaceNode(ctx context.Context, objType, token string) (*larkwiki.Node, error) {
+	req := larkwiki.NewGetNodeSpaceReqBuilder().
+		ObjType(objType).
+		Token(token).
+		Build()
+	resp, err := c.client.Wiki.Space.GetNode(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return nil, resp
+	}
+	return resp.Data.Node, nil
+}
+
+func (c *larkClient) GetLog(ctx context.Context, appId, apiKey string) ([]*larksecurity_and_compliance.OpenapiLog, error) {
+	req := larksecurity_and_compliance.NewListDataOpenapiLogReqBuilder().
+		ListOpenapiLogRequest(larksecurity_and_compliance.NewListOpenapiLogRequestBuilder().
+			ApiKeys([]string{apiKey}).
+			StartTime(1724896800).
+			EndTime(1724904000).
+			AppId(appId).
+			PageSize(100).
+			Build()).
+		Build()
+	resp, err := c.client.SecurityAndCompliance.OpenapiLog.ListData(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return nil, resp
+	}
+	return resp.Data.Items, nil
+}
+
+func (c *larkClient) ListParentDeptByDeptId(ctx context.Context, deptIdType string, deptId string) ([]*larkcontact.Department, error) {
+	req := larkcontact.NewParentDepartmentReqBuilder().
+		UserIdType(UserId).
+		DepartmentIdType(deptIdType).
+		DepartmentId(deptId).
+		PageSize(20).
+		Build()
+	resp, err := c.client.Contact.Department.Parent(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return nil, resp
+	}
+	Reverse(resp.Data.Items)
+	deptInfo, err := c.GetDeptById(ctx, deptIdType, deptId)
+	if err != nil {
+		return nil, err
+	}
+	resp.Data.Items = append(resp.Data.Items, deptInfo)
+	return resp.Data.Items, nil
+}
 
 func stackErr(err error) error {
 	return errors.WithStack(err)
+}
+
+func Reverse[S ~[]E, E any](s S) {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
 }
