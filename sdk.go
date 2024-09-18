@@ -71,6 +71,8 @@ type LarkClient interface {
 	ApproveTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId, form string) error
 	CcApprovalInst(ctx context.Context, approvalCode, instCode, fromUserId, comment string, ccUserIds []string) error
 	AddInstComment(ctx context.Context, instCode, userId, comment string) error
+	SearchUserApprovalTask(ctx context.Context, userId, taskStatus string) ([]*larkapproval.TaskSearchItem, error)
+	RejectTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId string) error
 
 	// 会议室
 	ListRoom(ctx context.Context, roomLevelId string) ([]*larkvc.Room, error)
@@ -496,9 +498,8 @@ func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 			UserIdType(UserId).
 			InstanceSearch(larkapproval.NewInstanceSearchBuilder().
 				ApprovalCode(approvalCode).
+				InstanceCode(instCode).
 				InstanceStatus(instStatus).
-				InstanceStartTimeFrom(timeFrom).
-				InstanceStartTimeTo(timeTo).
 				UserId(userId).
 				Locale(`zh-CN`).
 				Build()).
@@ -1130,13 +1131,55 @@ func (c *larkClient) ListParentDeptByDeptId(ctx context.Context, deptIdType stri
 		c.Alert(resp)
 		return nil, resp
 	}
-	Reverse(resp.Data.Items)
+	_slice.Reverse(resp.Data.Items)
 	deptInfo, err := c.GetDeptById(ctx, deptIdType, deptId)
 	if err != nil {
 		return nil, err
 	}
 	resp.Data.Items = append(resp.Data.Items, deptInfo)
 	return resp.Data.Items, nil
+}
+
+func (c *larkClient) RejectTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId string) error {
+	req := larkapproval.NewRejectTaskReqBuilder().
+		UserIdType(UserId).
+		TaskApprove(larkapproval.NewTaskApproveBuilder().
+			ApprovalCode(approvalCode).
+			InstanceCode(instCode).
+			UserId(userId).
+			TaskId(taskId).
+			Comment(comment).
+			Build()).
+		Build()
+	resp, err := c.client.Approval.Task.Reject(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(resp)
+		return resp
+	}
+	return nil
+}
+
+func (c *larkClient) SearchUserApprovalTask(ctx context.Context, userId, taskStatus string) ([]*larkapproval.TaskSearchItem, error) {
+	req := larkapproval.NewSearchTaskReqBuilder().UserIdType(`user_id`).
+		TaskSearch(larkapproval.NewTaskSearchBuilder().
+			UserId(userId).
+			TaskStatus(taskStatus).
+			Build()).
+		Build()
+	resp, err := c.client.Approval.Task.Search(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(err)
+		return nil, resp
+	}
+	return resp.Data.TaskList, nil
 }
 
 func stackErr(err error) error {
