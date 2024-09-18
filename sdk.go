@@ -697,15 +697,18 @@ func (c *larkClient) AddSign(ctx context.Context, operatorId, approvalCode, inst
 	return nil
 }
 func (c *larkClient) ApproveTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId, form string) error {
+	taskApproveBuilder := larkapproval.NewTaskApproveBuilder().
+		ApprovalCode(approvalCode).
+		InstanceCode(instCode).
+		UserId(userId).
+		Comment(comment).
+		TaskId(taskId)
+	if len(form) > 0 {
+		taskApproveBuilder = taskApproveBuilder.Form(form)
+	}
 	req := larkapproval.NewApproveTaskReqBuilder().
-		TaskApprove(larkapproval.NewTaskApproveBuilder().
-			ApprovalCode(approvalCode).
-			InstanceCode(instCode).
-			UserId(userId).
-			Comment(comment).
-			TaskId(taskId).
-			Form(form).
-			Build()).
+		UserIdType(UserId).
+		TaskApprove(taskApproveBuilder.Build()).
 		Build()
 	resp, err := c.client.Approval.Task.Approve(ctx, req)
 	if err != nil {
@@ -713,7 +716,7 @@ func (c *larkClient) ApproveTask(ctx context.Context, approvalCode, instCode, us
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(err)
+		c.Alert(resp)
 		return resp
 	}
 	return nil
@@ -1180,14 +1183,4 @@ func (c *larkClient) SearchUserApprovalTask(ctx context.Context, userId, taskSta
 		return nil, resp
 	}
 	return resp.Data.TaskList, nil
-}
-
-func stackErr(err error) error {
-	return errors.WithStack(err)
-}
-
-func Reverse[S ~[]E, E any](s S) {
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
-	}
 }
