@@ -66,7 +66,7 @@ type LarkClient interface {
 	ListApprovalInstIdByCode(ctx context.Context, code, startTime, endTime string) ([]string, error)
 	GetApprovalInstById(ctx context.Context, instId string) (*larkapproval.GetInstanceRespData, error)
 	SearchApprovalInst(ctx context.Context, userId, approvalCode, instCode, instStatus string) ([]*larkapproval.InstanceSearchItem, error)
-	CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}) error
+	CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}, nodeApprover []*larkapproval.NodeApprover) error
 	RollbackApprovalTask(ctx context.Context, currUserId, currTaskId, reason string, defKeys []string) error
 	AddSign(ctx context.Context, operatorId, approvalCode, instCode, taskId, comment string, addSignUserIds []string, addSignType, approvalMethod int) error
 	ApproveTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId, form string) error
@@ -144,7 +144,7 @@ func (c *larkClient) GetUserById(ctx context.Context, id, userIdType, deptIdType
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.User, nil
@@ -168,7 +168,7 @@ func (c *larkClient) getEmp(ctx context.Context, userIdType string, userIds []st
 				time.Sleep(sleepTime)
 				return c.getEmp(ctx, userIdType, userIds)
 			} else {
-				c.Alert(resp)
+				c.Alert(errors.New(string(resp.RawBody)))
 				return nil, resp
 			}
 		}
@@ -180,6 +180,7 @@ func (c *larkClient) getEmp(ctx context.Context, userIdType string, userIds []st
 func (c *larkClient) GetEmpByUserId(ctx context.Context, userId string) (*larkehr.Employee, error) {
 	employees, err := c.getEmp(ctx, UserId, []string{userId})
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
 	if len(employees) == 0 {
@@ -222,7 +223,7 @@ func (c *larkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 			return nil, err
 		}
 		if !resp.Success() {
-			c.Alert(resp)
+			c.Alert(errors.New(string(resp.RawBody)))
 			return nil, resp
 		}
 		hasMore = *resp.Data.HasMore
@@ -272,7 +273,7 @@ func (c *larkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]*la
 				return nil, err
 			}
 			if !resp.Success() {
-				c.Alert(resp)
+				c.Alert(errors.New(string(resp.RawBody)))
 				return nil, resp
 			}
 			hasMore = *resp.Data.HasMore
@@ -327,7 +328,7 @@ func (c *larkClient) GetDeptById(ctx context.Context, deptIdType, deptId string)
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.Department, nil
@@ -336,6 +337,7 @@ func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptIdType strin
 	res := make([]*larkcontact.Department, 0)
 	deptInfo, err := c.GetDeptById(ctx, deptIdType, deptId)
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
 	res = append(res, deptInfo)
@@ -354,7 +356,7 @@ func (c *larkClient) ListChildDeptByDeptId(ctx context.Context, deptIdType strin
 			return nil, err
 		}
 		if !resp.Success() {
-			c.Alert(resp)
+			c.Alert(errors.New(string(resp.RawBody)))
 			return nil, resp
 		}
 		hasMore = *resp.Data.HasMore
@@ -371,6 +373,7 @@ func (c *larkClient) ListChildDeptIdByDeptId(ctx context.Context, deptIdType str
 	res := make([]string, 0)
 	deptInfoList, err := c.ListChildDeptByDeptId(ctx, deptIdType, deptId)
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
 	for _, dept := range deptInfoList {
@@ -393,9 +396,11 @@ func (c *larkClient) SendMsg(ctx context.Context, receiveIdType, receivedId, msg
 		Build()
 	resp, err := c.client.Im.Message.Create(ctx, req)
 	if err != nil {
+		c.Alert(err)
 		return err
 	}
 	if !resp.Success() {
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -418,6 +423,7 @@ func (c *larkClient) SendCardMsg(ctx context.Context, receiveIdType, receivedId,
 	}
 	bytes, err := json.Marshal(m)
 	if err != nil {
+		c.Alert(err)
 		return err
 	}
 	return c.SendMsg(ctx, receiveIdType, receivedId, "interactive", string(bytes))
@@ -432,7 +438,7 @@ func (c *larkClient) SubscribeApproval(ctx context.Context, code string) error {
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -450,7 +456,7 @@ func (c *larkClient) GetApprovalDefineByCode(ctx context.Context, code string) (
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data, nil
@@ -471,7 +477,7 @@ func (c *larkClient) ListApprovalInstIdByCode(ctx context.Context, code, startTi
 			return nil, err
 		}
 		if !resp.Success() {
-			c.Alert(resp)
+			c.Alert(errors.New(string(resp.RawBody)))
 			return nil, resp
 		}
 		hasMore = *resp.Data.HasMore
@@ -492,7 +498,7 @@ func (c *larkClient) GetApprovalInstById(ctx context.Context, instId string) (*l
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data, nil
@@ -522,7 +528,7 @@ func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 			return nil, err
 		}
 		if !resp.Success() {
-			c.Alert(resp)
+			c.Alert(errors.New(string(resp.RawBody)))
 			return nil, resp
 		}
 		hasMore = *resp.Data.HasMore
@@ -535,9 +541,10 @@ func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCod
 	}
 	return res, nil
 }
-func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}) error {
+func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userId string, form interface{}, nodeApprover []*larkapproval.NodeApprover) error {
 	bytes, err := json.Marshal(form)
 	if err != nil {
+		c.Alert(err)
 		return err
 	}
 	req := larkapproval.NewCreateInstanceReqBuilder().
@@ -545,6 +552,7 @@ func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userI
 			ApprovalCode(approvalCode).
 			UserId(userId).
 			Form(string(bytes)).
+			NodeApproverUserIdList(nodeApprover).
 			Build()).
 		Build()
 	resp, err := c.client.Approval.Instance.Create(ctx, req)
@@ -553,7 +561,7 @@ func (c *larkClient) CreateApprovalInst(ctx context.Context, approvalCode, userI
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -567,11 +575,12 @@ func (c *larkClient) GetAttachment(ctx context.Context, token string) error {
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	data, err := io.ReadAll(resp.File)
 	if err != nil {
+		c.Alert(err)
 		return err
 	}
 	if err = os.WriteFile("./temp/"+resp.FileName, data, 0644); err != nil {
@@ -600,7 +609,7 @@ func (c *larkClient) ListAttendanceRecord(ctx context.Context, userIds []string,
 			return nil, err
 		}
 		if !resp.Success() {
-			c.Alert(resp)
+			c.Alert(errors.New(string(resp.RawBody)))
 			return nil, resp
 		}
 		for _, userTask := range resp.Data.UserTaskResults {
@@ -621,7 +630,7 @@ func (c *larkClient) ListRoleMember(ctx context.Context, roleId string) ([]*lark
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.Members, nil
@@ -642,7 +651,7 @@ func (c *larkClient) RollbackApprovalTask(ctx context.Context, currUserId, currT
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -674,6 +683,7 @@ func (c *larkClient) Alert(err error) {
 		AppName string `json:"app_name"`
 		Err     string `json:"err"`
 		ErrTime string `json:"err_time"`
+		Logid   string `json:"logid"`
 	}{
 		AppId:   appName,
 		AppName: c.appId,
@@ -705,7 +715,7 @@ func (c *larkClient) AddSign(ctx context.Context, operatorId, approvalCode, inst
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(err)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -730,7 +740,7 @@ func (c *larkClient) ApproveTask(ctx context.Context, approvalCode, instCode, us
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -748,7 +758,7 @@ func (c *larkClient) ListRoom(ctx context.Context, roomLevelId string) ([]*larkv
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	for _, room := range resp.Data.Rooms {
@@ -771,7 +781,7 @@ func (c *larkClient) CheckRoomFree(ctx context.Context, roomId, timeMin, timeMax
 		return false, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return false, resp
 	}
 	if len(resp.Data.FreebusyList) == 0 {
@@ -804,7 +814,7 @@ func (c *larkClient) SetCalendarRoom(ctx context.Context, calendarId, eventId, r
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -829,7 +839,7 @@ func (c *larkClient) SetCalendarUsers(ctx context.Context, calendarId, eventId s
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -849,7 +859,7 @@ func (c *larkClient) ListCalendarEvent(ctx context.Context, calendarId string) (
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.Items, nil
@@ -878,7 +888,7 @@ func (c *larkClient) CreateCalendarEvent(ctx context.Context, calendarId, summar
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.Event, nil
@@ -900,7 +910,7 @@ func (c *larkClient) CcApprovalInst(ctx context.Context, approvalCode, instCode,
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(err)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	c.Alert(errors.Errorf("instCode: %v from: %v cc: %v", instCode, fromUserId, ccUserIds))
@@ -922,7 +932,7 @@ func (c *larkClient) AddInstComment(ctx context.Context, instCode, userId, comme
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -941,14 +951,16 @@ func (c *larkClient) SearchAppTableRecord(ctx context.Context, appToken, tableId
 		Build()
 	resp, err := c.client.Bitable.AppTableRecord.Search(ctx, req)
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.Items, nil
 }
+
 func (c *larkClient) GetUserAccessToken(ctx context.Context, code string) (string, error) {
 	req := larkauthen.NewCreateOidcAccessTokenReqBuilder().
 		Body(larkauthen.NewCreateOidcAccessTokenReqBodyBuilder().
@@ -962,7 +974,7 @@ func (c *larkClient) GetUserAccessToken(ctx context.Context, code string) (strin
 		return "", err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return "", resp
 	}
 	return *resp.Data.AccessToken, nil
@@ -988,7 +1000,7 @@ func (c *larkClient) AddAttendanceFlow(ctx context.Context, userId, locationName
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -1015,7 +1027,7 @@ func (c *larkClient) ListBitableRecord(ctx context.Context, appToken, tableId st
 			return nil, err
 		}
 		if !resp.Success() {
-			c.Alert(resp)
+			c.Alert(errors.New(string(resp.RawBody)))
 			return nil, resp
 		}
 		hasMore = *resp.Data.HasMore
@@ -1045,7 +1057,7 @@ func (c *larkClient) InsertBitableRecord(ctx context.Context, appToken, tableId 
 			return err
 		}
 		if !resp.Success() {
-			c.Alert(resp)
+			c.Alert(errors.New(string(resp.RawBody)))
 			return resp
 		}
 	}
@@ -1064,7 +1076,7 @@ func (c *larkClient) InsertBitable1Record(ctx context.Context, appToken, tableId
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -1086,7 +1098,7 @@ func (c *larkClient) UpdateBitableRecord(ctx context.Context, appToken, tableId 
 			return err
 		}
 		if !resp.Success() {
-			c.Alert(resp)
+			c.Alert(errors.New(string(resp.RawBody)))
 			return resp
 		}
 	}
@@ -1104,7 +1116,7 @@ func (c *larkClient) GetSpaceNode(ctx context.Context, objType, token string) (*
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.Node, nil
@@ -1126,7 +1138,7 @@ func (c *larkClient) GetLog(ctx context.Context, appId, apiKey string) ([]*larks
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.Items, nil
@@ -1145,12 +1157,13 @@ func (c *larkClient) ListParentDeptByDeptId(ctx context.Context, deptIdType stri
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	_slice.Reverse(resp.Data.Items)
 	deptInfo, err := c.GetDeptById(ctx, deptIdType, deptId)
 	if err != nil {
+		c.Alert(err)
 		return nil, err
 	}
 	resp.Data.Items = append(resp.Data.Items, deptInfo)
@@ -1174,7 +1187,7 @@ func (c *larkClient) RejectTask(ctx context.Context, approvalCode, instCode, use
 		return err
 	}
 	if !resp.Success() {
-		c.Alert(resp)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return resp
 	}
 	return nil
@@ -1193,7 +1206,7 @@ func (c *larkClient) SearchUserApprovalTask(ctx context.Context, userId, taskSta
 		return nil, err
 	}
 	if !resp.Success() {
-		c.Alert(err)
+		c.Alert(errors.New(string(resp.RawBody)))
 		return nil, resp
 	}
 	return resp.Data.TaskList, nil
