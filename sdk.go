@@ -47,9 +47,9 @@ type LarkClient interface {
 	ListEmp(ctx context.Context, userIds []string) ([]*larkehr.Employee, error)
 	AllUser(ctx context.Context) ([]*larkcontact.User, error)
 	AllEmp(ctx context.Context) ([]*larkehr.Employee, error)
-	ListUserByDeptId(ctx context.Context, deptId string) ([]*larkcontact.User, error)
+	ListUserByDeptId(ctx context.Context, deptIdType, deptId string) ([]*larkcontact.User, error)
 	AllUserId(ctx context.Context) ([]string, error)
-	ListUserIdByDeptId(ctx context.Context, deptId string) ([]string, error)
+	ListUserIdByDeptId(ctx context.Context, deptIdType, deptId string) ([]string, error)
 
 	//部门
 	GetDeptById(ctx context.Context, deptIdType, deptId string) (*larkcontact.Department, error)
@@ -241,7 +241,7 @@ func (c *larkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 func (c *larkClient) AllUser(ctx context.Context) (res []*larkcontact.User, err error) {
 	startTime := time.Now()
 	for i := 0; i < maxRetry; i++ {
-		res, err = c.ListUserByDeptId(ctx, "0")
+		res, err = c.ListUserByDeptId(ctx, DepartmentId, "0")
 		if err == nil {
 			break
 		} else {
@@ -253,9 +253,9 @@ func (c *larkClient) AllUser(ctx context.Context) (res []*larkcontact.User, err 
 	echo.Json(endTime.Sub(startTime).String())
 	return res, err
 }
-func (c *larkClient) ListUserByDeptId(ctx context.Context, deptId string) ([]*larkcontact.User, error) {
+func (c *larkClient) ListUserByDeptId(ctx context.Context, deptIdType, deptId string) ([]*larkcontact.User, error) {
 	res := make([]*larkcontact.User, 0)
-	childDeptIds, err := c.ListChildDeptIdByDeptId(ctx, DepartmentId, deptId)
+	childDeptIds, err := c.ListChildDeptIdByDeptId(ctx, deptIdType, deptId)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
@@ -306,9 +306,9 @@ func (c *larkClient) AllUserId(ctx context.Context) ([]string, error) {
 	}
 	return userIds, nil
 }
-func (c *larkClient) ListUserIdByDeptId(ctx context.Context, deptId string) ([]string, error) {
+func (c *larkClient) ListUserIdByDeptId(ctx context.Context, deptIdType, deptId string) ([]string, error) {
 	res := make([]string, 0)
-	users, err := c.ListUserByDeptId(ctx, deptId)
+	users, err := c.ListUserByDeptId(ctx, deptIdType, deptId)
 	if err != nil {
 		c.Alert(err)
 		return nil, err
