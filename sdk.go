@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/YueY4n9/gotools/echo"
@@ -62,6 +63,7 @@ type LarkClient interface {
 
 	// 审批
 	SubscribeApproval(ctx context.Context, code string) error
+	UnsubscribeApproval(ctx context.Context, code string) error
 	GetApprovalDefineByCode(ctx context.Context, code string) (*larkapproval.GetApprovalRespData, error)
 	ListApprovalInstIdByCode(ctx context.Context, code, startTime, endTime string) ([]string, error)
 	GetApprovalInstById(ctx context.Context, instId string) (*larkapproval.GetInstanceRespData, error)
@@ -74,6 +76,11 @@ type LarkClient interface {
 	AddInstComment(ctx context.Context, instCode, userId, comment string) error
 	SearchUserApprovalTask(ctx context.Context, userId, taskStatus string) ([]*larkapproval.TaskSearchItem, error)
 	RejectTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId string) error
+
+	// 假勤
+	ListLeaveData(ctx context.Context, from, to time.Time, userIds []string) ([]*larkattendance.UserApproval, error)
+	GetAttendanceGroup(ctx context.Context, groupId string) (*larkattendance.GetGroupRespData, error)
+	SetShift(ctx context.Context, groupId, shiftId string, userIds []string, date time.Time) error
 
 	// 会议室
 	ListRoom(ctx context.Context, roomLevelId string) ([]*larkvc.Room, error)
@@ -124,15 +131,12 @@ func NewClient(appId, appSecret string, debug ...string) LarkClient {
 func (c *larkClient) Client() *lark.Client {
 	return c.client
 }
-
 func (c *larkClient) GetUserByUserId(ctx context.Context, userId string) (*larkcontact.User, error) {
 	return c.GetUserById(ctx, userId, UserId, DepartmentId)
 }
-
 func (c *larkClient) GetUserByOpenId(ctx context.Context, openId string) (*larkcontact.User, error) {
 	return c.GetUserById(ctx, openId, OpenId, DepartmentId)
 }
-
 func (c *larkClient) GetUserById(ctx context.Context, id, userIdType, deptIdType string) (*larkcontact.User, error) {
 	resp, err := c.client.Contact.User.Get(ctx, larkcontact.NewGetUserReqBuilder().
 		UserId(id).
@@ -149,7 +153,6 @@ func (c *larkClient) GetUserById(ctx context.Context, id, userIdType, deptIdType
 	}
 	return resp.Data.User, nil
 }
-
 func (c *larkClient) getEmp(ctx context.Context, userIdType string, userIds []string) ([]*larkehr.Employee, error) {
 	res := make([]*larkehr.Employee, 0)
 	for _, chunk := range _slice.ChunkSlice(userIds, 100) {
@@ -176,7 +179,6 @@ func (c *larkClient) getEmp(ctx context.Context, userIdType string, userIds []st
 	}
 	return res, nil
 }
-
 func (c *larkClient) GetEmpByUserId(ctx context.Context, userId string) (*larkehr.Employee, error) {
 	employees, err := c.getEmp(ctx, UserId, []string{userId})
 	if err != nil {
@@ -443,6 +445,21 @@ func (c *larkClient) SubscribeApproval(ctx context.Context, code string) error {
 	}
 	return nil
 }
+func (c *larkClient) UnsubscribeApproval(ctx context.Context, code string) error {
+	req := larkapproval.NewSubscribeApprovalReqBuilder().
+		ApprovalCode(code).
+		Build()
+	resp, err := c.client.Approval.Approval.Subscribe(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(errors.New(string(resp.RawBody)))
+		return resp
+	}
+	return nil
+}
 func (c *larkClient) GetApprovalDefineByCode(ctx context.Context, code string) (*larkapproval.GetApprovalRespData, error) {
 	req := larkapproval.NewGetApprovalReqBuilder().
 		ApprovalCode(code).
@@ -503,10 +520,6 @@ func (c *larkClient) GetApprovalInstById(ctx context.Context, instId string) (*l
 	}
 	return resp.Data, nil
 }
-
-// SearchApprovalInst user_id、approval_code、instance_code、instance_external_id、group_external_id 不得均为空
-// approval_code 和 group_external_id 查询结果取并集，instance_code 和 instance_external_id 查询结果取并集，其他查询条件都对应取交集
-// 查询时间跨度不得大于30天，开始和结束时间必须都设置，或者都不设置
 func (c *larkClient) SearchApprovalInst(ctx context.Context, userId, approvalCode, instCode, instStatus string) ([]*larkapproval.InstanceSearchItem, error) {
 	res := make([]*larkapproval.InstanceSearchItem, 0)
 	for hasMore, pageToken := true, ""; hasMore; {
@@ -695,7 +708,6 @@ func (c *larkClient) Alert(err error) {
 		echo.Json(err)
 	}
 }
-
 func (c *larkClient) AddSign(ctx context.Context, operatorId, approvalCode, instCode, taskId, comment string, addSignUserIds []string, addSignType, approvalMethod int) error {
 	req := larkapproval.NewAddSignInstanceReqBuilder().
 		Body(larkapproval.NewAddSignInstanceReqBodyBuilder().
@@ -937,7 +949,6 @@ func (c *larkClient) AddInstComment(ctx context.Context, instCode, userId, comme
 	}
 	return nil
 }
-
 func (c *larkClient) SearchAppTableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, info *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error) {
 	req := larkbitable.NewSearchAppTableRecordReqBuilder().
 		AppToken(appToken).
@@ -960,7 +971,6 @@ func (c *larkClient) SearchAppTableRecord(ctx context.Context, appToken, tableId
 	}
 	return resp.Data.Items, nil
 }
-
 func (c *larkClient) GetUserAccessToken(ctx context.Context, code string) (string, error) {
 	req := larkauthen.NewCreateOidcAccessTokenReqBuilder().
 		Body(larkauthen.NewCreateOidcAccessTokenReqBodyBuilder().
@@ -1005,7 +1015,6 @@ func (c *larkClient) AddAttendanceFlow(ctx context.Context, userId, locationName
 	}
 	return nil
 }
-
 func (c *larkClient) ListBitableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, sort []*larkbitable.Sort, filter *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error) {
 	res := make([]*larkbitable.AppTableRecord, 0)
 	for hasMore, pageToken := true, ""; hasMore; {
@@ -1040,7 +1049,6 @@ func (c *larkClient) ListBitableRecord(ctx context.Context, appToken, tableId st
 	}
 	return res, nil
 }
-
 func (c *larkClient) InsertBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error {
 	for _, chunk := range _slice.ChunkSlice(records, 500) {
 		req := larkbitable.NewBatchCreateAppTableRecordReqBuilder().
@@ -1063,7 +1071,6 @@ func (c *larkClient) InsertBitableRecord(ctx context.Context, appToken, tableId 
 	}
 	return nil
 }
-
 func (c *larkClient) InsertBitable1Record(ctx context.Context, appToken, tableId string, record *larkbitable.AppTableRecord) error {
 	req := larkbitable.NewCreateAppTableRecordReqBuilder().
 		AppToken(appToken).
@@ -1081,7 +1088,6 @@ func (c *larkClient) InsertBitable1Record(ctx context.Context, appToken, tableId
 	}
 	return nil
 }
-
 func (c *larkClient) UpdateBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error {
 	for _, chunk := range _slice.ChunkSlice(records, 500) {
 		req := larkbitable.NewBatchUpdateAppTableRecordReqBuilder().
@@ -1104,7 +1110,6 @@ func (c *larkClient) UpdateBitableRecord(ctx context.Context, appToken, tableId 
 	}
 	return nil
 }
-
 func (c *larkClient) GetSpaceNode(ctx context.Context, objType, token string) (*larkwiki.Node, error) {
 	req := larkwiki.NewGetNodeSpaceReqBuilder().
 		ObjType(objType).
@@ -1121,7 +1126,6 @@ func (c *larkClient) GetSpaceNode(ctx context.Context, objType, token string) (*
 	}
 	return resp.Data.Node, nil
 }
-
 func (c *larkClient) GetLog(ctx context.Context, appId, apiKey string) ([]*larksecurityandcompliance.OpenapiLog, error) {
 	req := larksecurityandcompliance.NewListDataOpenapiLogReqBuilder().
 		ListOpenapiLogRequest(larksecurityandcompliance.NewListOpenapiLogRequestBuilder().
@@ -1143,7 +1147,6 @@ func (c *larkClient) GetLog(ctx context.Context, appId, apiKey string) ([]*larks
 	}
 	return resp.Data.Items, nil
 }
-
 func (c *larkClient) ListParentDeptByDeptId(ctx context.Context, deptIdType string, deptId string) ([]*larkcontact.Department, error) {
 	req := larkcontact.NewParentDepartmentReqBuilder().
 		UserIdType(UserId).
@@ -1169,7 +1172,6 @@ func (c *larkClient) ListParentDeptByDeptId(ctx context.Context, deptIdType stri
 	resp.Data.Items = append(resp.Data.Items, deptInfo)
 	return resp.Data.Items, nil
 }
-
 func (c *larkClient) RejectTask(ctx context.Context, approvalCode, instCode, userId, comment, taskId string) error {
 	req := larkapproval.NewRejectTaskReqBuilder().
 		UserIdType(UserId).
@@ -1192,7 +1194,6 @@ func (c *larkClient) RejectTask(ctx context.Context, approvalCode, instCode, use
 	}
 	return nil
 }
-
 func (c *larkClient) SearchUserApprovalTask(ctx context.Context, userId, taskStatus string) ([]*larkapproval.TaskSearchItem, error) {
 	req := larkapproval.NewSearchTaskReqBuilder().UserIdType(`user_id`).
 		TaskSearch(larkapproval.NewTaskSearchBuilder().
@@ -1210,4 +1211,86 @@ func (c *larkClient) SearchUserApprovalTask(ctx context.Context, userId, taskSta
 		return nil, resp
 	}
 	return resp.Data.TaskList, nil
+}
+func (c *larkClient) ListLeaveData(ctx context.Context, from, to time.Time, userIds []string) ([]*larkattendance.UserApproval, error) {
+	result := make([]*larkattendance.UserApproval, 0)
+	fromNum, err := strconv.Atoi(from.Format("20060102"))
+	if err != nil {
+		return nil, err
+	}
+	toNum, err := strconv.Atoi(to.Format("20060102"))
+	if err != nil {
+		return nil, err
+	}
+	for _, chunk := range _slice.ChunkSlice(userIds, 50) {
+		req := larkattendance.NewQueryUserApprovalReqBuilder().
+			EmployeeType("employee_id").
+			Body(larkattendance.NewQueryUserApprovalReqBodyBuilder().
+				UserIds(chunk).
+				CheckDateFrom(fromNum).
+				CheckDateTo(toNum).
+				Build()).
+			Build()
+		resp, err := c.client.Attendance.UserApproval.Query(ctx, req)
+		if err != nil {
+			c.Alert(err)
+			return nil, err
+		}
+		if !resp.Success() {
+			c.Alert(errors.New(string(resp.RawBody)))
+			return nil, resp
+		}
+		result = append(result, resp.Data.UserApprovals...)
+	}
+	return result, nil
+}
+func (c *larkClient) SetShift(ctx context.Context, groupId, shiftId string, userIds []string, date time.Time) error {
+	month := date.Year()*100 + int(date.Month())
+	dayNo := date.Day()
+	for _, chunk := range _slice.ChunkSlice(userIds, 50) {
+		userDailyShifts := make([]*larkattendance.UserDailyShift, 0)
+		for i := range chunk {
+			userDailyShifts = append(userDailyShifts, larkattendance.NewUserDailyShiftBuilder().
+				GroupId(groupId).
+				ShiftId(shiftId).
+				Month(month).
+				UserId(chunk[i]).
+				DayNo(dayNo).
+				Build())
+		}
+		req := larkattendance.NewBatchCreateUserDailyShiftReqBuilder().
+			EmployeeType("employee_id").
+			Body(larkattendance.NewBatchCreateUserDailyShiftReqBodyBuilder().
+				UserDailyShifts(userDailyShifts).
+				OperatorId(`manjuurobot`).
+				Build()).
+			Build()
+		resp, err := c.client.Attendance.UserDailyShift.BatchCreate(ctx, req)
+		if err != nil {
+			c.Alert(err)
+			return err
+		}
+		if !resp.Success() {
+			c.Alert(errors.New(string(resp.RawBody)))
+			return resp
+		}
+	}
+	return nil
+}
+func (c *larkClient) GetAttendanceGroup(ctx context.Context, groupId string) (*larkattendance.GetGroupRespData, error) {
+	req := larkattendance.NewGetGroupReqBuilder().
+		GroupId(groupId).
+		EmployeeType("employee_id").
+		DeptType("open_id").
+		Build()
+	resp, err := c.client.Attendance.Group.Get(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(errors.New(string(resp.RawBody)))
+		return nil, resp
+	}
+	return resp.Data, nil
 }
