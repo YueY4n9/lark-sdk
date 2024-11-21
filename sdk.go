@@ -21,6 +21,7 @@ import (
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 	larkcalendar "github.com/larksuite/oapi-sdk-go/v3/service/calendar/v4"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
+	larkdrive "github.com/larksuite/oapi-sdk-go/v3/service/drive/v1"
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larksecurityandcompliance "github.com/larksuite/oapi-sdk-go/v3/service/security_and_compliance/v1"
@@ -96,6 +97,8 @@ type LarkClient interface {
 	InsertBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error
 	InsertBitable1Record(ctx context.Context, appToken, tableId string, record *larkbitable.AppTableRecord) error
 	UpdateBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error
+	CopySpaceNode(ctx context.Context, spaceId, nodeToken, targetParentToken, nodeName string) (*larkwiki.Node, error)
+	SubscribeFile(ctx context.Context, fileToken, fileType string) error
 
 	// 其他
 	GetAttachment(ctx context.Context, token string) error
@@ -1293,4 +1296,40 @@ func (c *larkClient) GetAttendanceGroup(ctx context.Context, groupId string) (*l
 		return nil, resp
 	}
 	return resp.Data, nil
+}
+func (c *larkClient) CopySpaceNode(ctx context.Context, spaceId, nodeToken, targetParentToken, nodeName string) (*larkwiki.Node, error) {
+	req := larkwiki.NewCopySpaceNodeReqBuilder().
+		SpaceId(spaceId).
+		NodeToken(nodeToken).
+		Body(larkwiki.NewCopySpaceNodeReqBodyBuilder().
+			TargetParentToken(targetParentToken).
+			Title(nodeName).
+			Build()).
+		Build()
+	resp, err := c.client.Wiki.SpaceNode.Copy(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(errors.New(string(resp.RawBody)))
+		return nil, resp
+	}
+	return resp.Data.Node, nil
+}
+func (c *larkClient) SubscribeFile(ctx context.Context, fileToken, fileType string) error {
+	req := larkdrive.NewSubscribeFileReqBuilder().
+		FileToken(fileToken).
+		FileType(fileType).
+		Build()
+	resp, err := c.client.Drive.File.Subscribe(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return err
+	}
+	if !resp.Success() {
+		c.Alert(errors.New(string(resp.RawBody)))
+		return resp
+	}
+	return nil
 }
