@@ -1216,37 +1216,57 @@ func (c *larkClient) SearchUserApprovalTask(ctx context.Context, userId, taskSta
 	return resp.Data.TaskList, nil
 }
 func (c *larkClient) ListLeaveData(ctx context.Context, from, to time.Time, userIds []string) ([]*larkattendance.UserApproval, error) {
+	const maxDays = 30 // 最大支持的时间间隔
 	result := make([]*larkattendance.UserApproval, 0)
-	fromNum, err := strconv.Atoi(from.Format("20060102"))
-	if err != nil {
-		return nil, err
+	// 切分时间区间，保证每个区间不超过30天
+	var timeRanges []struct {
+		Start time.Time
+		End   time.Time
 	}
-	toNum, err := strconv.Atoi(to.Format("20060102"))
-	if err != nil {
-		return nil, err
+	for start := from; start.Before(to); {
+		end := start.AddDate(0, 0, maxDays-1) // 每段最多30天
+		if end.After(to) {
+			end = to
+		}
+		timeRanges = append(timeRanges, struct {
+			Start time.Time
+			End   time.Time
+		}{Start: start, End: end})
+		start = end.AddDate(0, 0, 1) // 下一段从 end 的下一天开始
 	}
-	for _, chunk := range _slice.ChunkSlice(userIds, 50) {
-		req := larkattendance.NewQueryUserApprovalReqBuilder().
-			EmployeeType("employee_id").
-			Body(larkattendance.NewQueryUserApprovalReqBodyBuilder().
-				UserIds(chunk).
-				CheckDateFrom(fromNum).
-				CheckDateTo(toNum).
-				Build()).
-			Build()
-		resp, err := c.client.Attendance.UserApproval.Query(ctx, req)
+	for _, timeRange := range timeRanges {
+		fromNum, err := strconv.Atoi(timeRange.Start.Format("20060102"))
 		if err != nil {
-			c.Alert(err)
 			return nil, err
 		}
-		if !resp.Success() {
-			c.Alert(errors.New(string(resp.RawBody)))
-			return nil, resp
+		toNum, err := strconv.Atoi(timeRange.End.Format("20060102"))
+		if err != nil {
+			return nil, err
 		}
-		result = append(result, resp.Data.UserApprovals...)
+		for _, chunk := range _slice.ChunkSlice(userIds, 50) {
+			req := larkattendance.NewQueryUserApprovalReqBuilder().
+				EmployeeType("employee_id").
+				Body(larkattendance.NewQueryUserApprovalReqBodyBuilder().
+					UserIds(chunk).
+					CheckDateFrom(fromNum).
+					CheckDateTo(toNum).
+					Build()).
+				Build()
+			resp, err := c.client.Attendance.UserApproval.Query(ctx, req)
+			if err != nil {
+				c.Alert(err)
+				return nil, err
+			}
+			if !resp.Success() {
+				c.Alert(errors.New(string(resp.RawBody)))
+				return nil, resp
+			}
+			result = append(result, resp.Data.UserApprovals...)
+		}
 	}
 	return result, nil
 }
+
 func (c *larkClient) SetShift(ctx context.Context, groupId, shiftId string, userIds []string, date time.Time) error {
 	month := date.Year()*100 + int(date.Month())
 	dayNo := date.Day()
