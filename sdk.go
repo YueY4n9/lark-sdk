@@ -701,8 +701,8 @@ func (c *larkClient) Alert(err error) {
 		ErrTime string `json:"err_time"`
 		Logid   string `json:"logid"`
 	}{
-		AppId:   appName,
-		AppName: c.appId,
+		AppId:   c.appId,
+		AppName: appName,
 		Err:     err.Error(),
 		ErrTime: time.Now().Format(time.DateTime),
 	}
