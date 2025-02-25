@@ -1261,7 +1261,11 @@ func (c *larkClient) ListLeaveData(ctx context.Context, from, to time.Time, user
 				c.Alert(errors.New(string(resp.RawBody)))
 				return nil, resp
 			}
-			result = append(result, resp.Data.UserApprovals...)
+			for _, approval := range resp.Data.UserApprovals {
+				if len(approval.Leaves) > 0 {
+					result = append(result, approval)
+				}
+			}
 		}
 	}
 	return result, nil
