@@ -449,10 +449,10 @@ func (c *larkClient) SubscribeApproval(ctx context.Context, code string) error {
 	return nil
 }
 func (c *larkClient) UnsubscribeApproval(ctx context.Context, code string) error {
-	req := larkapproval.NewSubscribeApprovalReqBuilder().
+	req := larkapproval.NewUnsubscribeApprovalReqBuilder().
 		ApprovalCode(code).
 		Build()
-	resp, err := c.client.Approval.Approval.Subscribe(ctx, req)
+	resp, err := c.client.Approval.Approval.Unsubscribe(ctx, req)
 	if err != nil {
 		c.Alert(err)
 		return err
