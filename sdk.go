@@ -115,6 +115,7 @@ type larkClient struct {
 	appSecret   string
 	debugId     string
 	debugSecret string
+	adminUserId string
 	client      *lark.Client
 }
 
@@ -124,9 +125,13 @@ func NewClient(appId, appSecret string, debug ...string) LarkClient {
 		appSecret: appSecret,
 		client:    lark.NewClient(appId, appSecret, lark.WithEnableTokenCache(true)),
 	}
-	if len(debug) == 2 {
+	if len(debug) >= 2 {
 		c.debugId = debug[0]
 		c.debugSecret = debug[1]
+		c.adminUserId = "3291738c"
+	}
+	if len(debug) >= 3 {
+		c.adminUserId = debug[2]
 	}
 	return c
 }
@@ -706,7 +711,7 @@ func (c *larkClient) Alert(err error) {
 		Err:     err.Error(),
 		ErrTime: time.Now().Format(time.DateTime),
 	}
-	err = client.SendCardMsg(context.Background(), UserId, "3291738c", "AAq3zkrIEYCqR", obj)
+	err = client.SendCardMsg(context.Background(), UserId, c.adminUserId, "AAq3zkrIEYCqR", obj)
 	if err != nil {
 		echo.Json(err)
 	}
