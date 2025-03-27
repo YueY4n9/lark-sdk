@@ -37,6 +37,7 @@ const (
 
 type LarkClient interface {
 	Client() *lark.Client
+	GetAppName() string
 
 	GetUserAccessToken(ctx context.Context, code string) (string, error)
 
@@ -113,6 +114,7 @@ type LarkClient interface {
 type larkClient struct {
 	appId       string
 	appSecret   string
+	appName     string
 	debugId     string
 	debugSecret string
 	adminUserId string
@@ -128,6 +130,7 @@ func NewClient(appId, appSecret string, debug ...string) LarkClient {
 	if len(debug) >= 2 {
 		c.debugId = debug[0]
 		c.debugSecret = debug[1]
+		c.appName = *NewClient(c.debugId, c.debugSecret).GetAppInfo(appId).AppName
 		c.adminUserId = "3291738c"
 	}
 	if len(debug) >= 3 {
@@ -139,6 +142,10 @@ func NewClient(appId, appSecret string, debug ...string) LarkClient {
 func (c *larkClient) Client() *lark.Client {
 	return c.client
 }
+func (c *larkClient) GetAppName() string {
+	return c.appName
+}
+
 func (c *larkClient) GetUserByUserId(ctx context.Context, userId string) (*larkcontact.User, error) {
 	return c.GetUserById(ctx, userId, UserId, DepartmentId)
 }
