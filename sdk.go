@@ -1235,7 +1235,7 @@ func (c *larkClient) ListLeaveData(ctx context.Context, from, to time.Time, user
 		Start time.Time
 		End   time.Time
 	}
-	for start := from; start.Before(to); {
+	for start := from; !start.After(to); {
 		end := start.AddDate(0, 0, maxDays-1) // 每段最多30天
 		if end.After(to) {
 			end = to
