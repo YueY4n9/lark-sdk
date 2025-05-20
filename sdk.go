@@ -83,6 +83,7 @@ type LarkClient interface {
 	ListLeaveData(ctx context.Context, from, to time.Time, userIds []string) ([]*larkattendance.UserApproval, error)
 	GetAttendanceGroup(ctx context.Context, groupId string) (*larkattendance.GetGroupRespData, error)
 	SetShift(ctx context.Context, groupId, shiftId string, userIds []string, date time.Time) error
+	ListAttendanceStats(ctx context.Context, from, to time.Time, userIds []string) ([]*larkattendance.UserStatsData, error)
 
 	// 会议室
 	ListRoom(ctx context.Context, roomLevelId string) ([]*larkvc.Room, error)
@@ -1368,4 +1369,43 @@ func (c *larkClient) SubscribeFile(ctx context.Context, fileToken, fileType stri
 		return resp
 	}
 	return nil
+}
+func (c *larkClient) ListAttendanceStats(ctx context.Context, from, to time.Time, userIds []string) ([]*larkattendance.UserStatsData, error) {
+	startDate, err := strconv.Atoi(from.Format("20060102"))
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	endDate, err := strconv.Atoi(to.Format("20060102"))
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	var res []*larkattendance.UserStatsData
+	for _, chunk := range _slice.ChunkSlice(userIds, 200) {
+		req := larkattendance.NewQueryUserStatsDataReqBuilder().
+			EmployeeType(`employee_id`).
+			Body(larkattendance.NewQueryUserStatsDataReqBodyBuilder().
+				Locale(`zh`).
+				StatsType(`month`).
+				StartDate(startDate).
+				EndDate(endDate).
+				UserIds(chunk).
+				NeedHistory(true).
+				CurrentGroupOnly(true).
+				UserId(c.adminUserId).
+				Build()).
+			Build()
+		resp, err := c.client.Attendance.UserStatsData.Query(ctx, req)
+		if err != nil {
+			c.Alert(err)
+			return nil, err
+		}
+		if !resp.Success() {
+			c.Alert(errors.New(string(resp.RawBody)))
+			return nil, resp
+		}
+		res = append(res, resp.Data.UserDatas...)
+	}
+	return res, nil
 }
