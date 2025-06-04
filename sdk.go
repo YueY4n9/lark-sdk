@@ -230,7 +230,7 @@ func (c *larkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 			View("full").
 			PageSize(100).
 			UserIdType(UserId).
-			Status([]int{2})
+			Status([]int{2,4})
 		if pageToken != "" {
 			employeeReqBuilder.PageToken(pageToken)
 		}
