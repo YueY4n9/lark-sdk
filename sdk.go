@@ -419,6 +419,7 @@ func (c *larkClient) SendMsg(ctx context.Context, receiveIdType, receivedId, msg
 	}
 	if !resp.Success() {
 		c.Alert(errors.New(string(resp.RawBody)))
+		c.Alert(errors.New(fmt.Sprintf("sendMsg to %s error, content: %s", receivedId, content)))
 		return resp
 	}
 	return nil
