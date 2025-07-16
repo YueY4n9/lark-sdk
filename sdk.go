@@ -96,8 +96,8 @@ type LarkClient interface {
 	// 云文档
 	GetSpaceNode(ctx context.Context, objType, token string) (*larkwiki.Node, error)
 	ListBitableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, sort []*larkbitable.Sort, filter *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error)
-	InsertBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error
-	InsertBitable1Record(ctx context.Context, appToken, tableId string, record *larkbitable.AppTableRecord) error
+	InsertBitableRecord(ctx context.Context, appToken, tableId, userIdType string, records []*larkbitable.AppTableRecord) error
+	InsertBitable1Record(ctx context.Context, appToken, tableId, userIdType string, record *larkbitable.AppTableRecord) error
 	UpdateBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error
 	CopySpaceNode(ctx context.Context, spaceId, nodeToken, targetParentToken, nodeName string) (*larkwiki.Node, error)
 	SubscribeFile(ctx context.Context, fileToken, fileType string) error
@@ -230,7 +230,7 @@ func (c *larkClient) AllEmp(ctx context.Context) ([]*larkehr.Employee, error) {
 			View("full").
 			PageSize(100).
 			UserIdType(UserId).
-			Status([]int{2,4})
+			Status([]int{2, 4})
 		if pageToken != "" {
 			employeeReqBuilder.PageToken(pageToken)
 		}
@@ -1066,12 +1066,12 @@ func (c *larkClient) ListBitableRecord(ctx context.Context, appToken, tableId st
 	}
 	return res, nil
 }
-func (c *larkClient) InsertBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error {
+func (c *larkClient) InsertBitableRecord(ctx context.Context, appToken, tableId, userIdType string, records []*larkbitable.AppTableRecord) error {
 	for _, chunk := range _slice.ChunkSlice(records, 500) {
 		req := larkbitable.NewBatchCreateAppTableRecordReqBuilder().
 			AppToken(appToken).
 			TableId(tableId).
-			UserIdType(UserId).
+			UserIdType(userIdType).
 			Body(larkbitable.NewBatchCreateAppTableRecordReqBodyBuilder().
 				Records(chunk).
 				Build()).
@@ -1088,11 +1088,12 @@ func (c *larkClient) InsertBitableRecord(ctx context.Context, appToken, tableId 
 	}
 	return nil
 }
-func (c *larkClient) InsertBitable1Record(ctx context.Context, appToken, tableId string, record *larkbitable.AppTableRecord) error {
+func (c *larkClient) InsertBitable1Record(ctx context.Context, appToken, tableId, userIdType string, record *larkbitable.AppTableRecord) error {
 	req := larkbitable.NewCreateAppTableRecordReqBuilder().
 		AppToken(appToken).
 		TableId(tableId).
-		UserIdType(UserId).AppTableRecord(record).
+		UserIdType(userIdType).
+		AppTableRecord(record).
 		Build()
 	resp, err := c.client.Bitable.AppTableRecord.Create(ctx, req)
 	if err != nil {
