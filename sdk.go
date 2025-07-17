@@ -101,6 +101,7 @@ type LarkClient interface {
 	UpdateBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error
 	CopySpaceNode(ctx context.Context, spaceId, nodeToken, targetParentToken, nodeName string) (*larkwiki.Node, error)
 	SubscribeFile(ctx context.Context, fileToken, fileType string) error
+	GetRecord(ctx context.Context, appToken, tableId, recordId string) (*larkbitable.AppTableRecord, error)
 
 	// 其他
 	GetAttachment(ctx context.Context, token string) error
@@ -1410,4 +1411,22 @@ func (c *larkClient) ListAttendanceStats(ctx context.Context, from, to time.Time
 		res = append(res, resp.Data.UserDatas...)
 	}
 	return res, nil
+}
+
+func (c *larkClient) GetRecord(ctx context.Context, appToken, tableId, recordId string) (*larkbitable.AppTableRecord, error) {
+	req := larkbitable.NewGetAppTableRecordReqBuilder().
+		AppToken(appToken).
+		TableId(tableId).
+		RecordId(recordId).
+		Build()
+	resp, err := c.client.Bitable.V1.AppTableRecord.Get(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(errors.New(string(resp.RawBody)))
+		return nil, resp
+	}
+	return resp.Data.Record, nil
 }
