@@ -95,10 +95,10 @@ type LarkClient interface {
 
 	// 云文档
 	GetSpaceNode(ctx context.Context, objType, token string) (*larkwiki.Node, error)
-	ListBitableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, sort []*larkbitable.Sort, filter *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error)
+	ListBitableRecord(ctx context.Context, appToken, tableId, userIdType string, fieldNames []string, sort []*larkbitable.Sort, filter *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error)
 	InsertBitableRecord(ctx context.Context, appToken, tableId, userIdType string, records []*larkbitable.AppTableRecord) error
 	InsertBitable1Record(ctx context.Context, appToken, tableId, userIdType string, record *larkbitable.AppTableRecord) error
-	UpdateBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error
+	UpdateBitableRecord(ctx context.Context, appToken, tableId, userIdType string, records []*larkbitable.AppTableRecord) error
 	CopySpaceNode(ctx context.Context, spaceId, nodeToken, targetParentToken, nodeName string) (*larkwiki.Node, error)
 	SubscribeFile(ctx context.Context, fileToken, fileType string) error
 	GetRecord(ctx context.Context, appToken, tableId, recordId string) (*larkbitable.AppTableRecord, error)
@@ -1033,13 +1033,13 @@ func (c *larkClient) AddAttendanceFlow(ctx context.Context, userId, locationName
 	}
 	return nil
 }
-func (c *larkClient) ListBitableRecord(ctx context.Context, appToken, tableId string, fieldNames []string, sort []*larkbitable.Sort, filter *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error) {
+func (c *larkClient) ListBitableRecord(ctx context.Context, appToken, tableId, userIdType string, fieldNames []string, sort []*larkbitable.Sort, filter *larkbitable.FilterInfo) ([]*larkbitable.AppTableRecord, error) {
 	res := make([]*larkbitable.AppTableRecord, 0)
 	for hasMore, pageToken := true, ""; hasMore; {
 		req := larkbitable.NewSearchAppTableRecordReqBuilder().
 			AppToken(appToken).
 			TableId(tableId).
-			UserIdType(UserId).
+			UserIdType(userIdType).
 			PageSize(500).
 			PageToken(pageToken).
 			Body(larkbitable.NewSearchAppTableRecordReqBodyBuilder().
@@ -1107,12 +1107,12 @@ func (c *larkClient) InsertBitable1Record(ctx context.Context, appToken, tableId
 	}
 	return nil
 }
-func (c *larkClient) UpdateBitableRecord(ctx context.Context, appToken, tableId string, records []*larkbitable.AppTableRecord) error {
+func (c *larkClient) UpdateBitableRecord(ctx context.Context, appToken, tableId, userIdType string, records []*larkbitable.AppTableRecord) error {
 	for _, chunk := range _slice.ChunkSlice(records, 500) {
 		req := larkbitable.NewBatchUpdateAppTableRecordReqBuilder().
 			AppToken(appToken).
 			TableId(tableId).
-			UserIdType(UserId).
+			UserIdType(userIdType).
 			Body(larkbitable.NewBatchUpdateAppTableRecordReqBodyBuilder().
 				Records(chunk).
 				Build()).
