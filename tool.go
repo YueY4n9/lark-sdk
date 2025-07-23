@@ -1,6 +1,9 @@
 package lark_sdk
 
-import "encoding/json"
+import (
+	"encoding/json"
+	larkcorehr "github.com/larksuite/oapi-sdk-go/v3/service/corehr/v2"
+)
 
 func ParseForm(formStr string) ([]FormWidget, error) {
 	res := make([]FormWidget, 0)
@@ -21,4 +24,12 @@ func ParseForm2Map(formStr string) (map[string]FormWidget, error) {
 		res[widget.Name] = widget
 	}
 	return res, nil
+}
+
+func ParseAbstractItem(items []*larkcorehr.ProcessAbstractItem) map[string]string {
+	res := make(map[string]string)
+	for _, item := range items {
+		res[*item.Name.ZhCn] = *item.Value.ZhCn
+	}
+	return res
 }
