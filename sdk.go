@@ -21,6 +21,7 @@ import (
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 	larkcalendar "github.com/larksuite/oapi-sdk-go/v3/service/calendar/v4"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
+	larkcorehr "github.com/larksuite/oapi-sdk-go/v3/service/corehr/v2"
 	larkdrive "github.com/larksuite/oapi-sdk-go/v3/service/drive/v1"
 	larkehr "github.com/larksuite/oapi-sdk-go/v3/service/ehr/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -102,6 +103,9 @@ type LarkClient interface {
 	CopySpaceNode(ctx context.Context, spaceId, nodeToken, targetParentToken, nodeName string) (*larkwiki.Node, error)
 	SubscribeFile(ctx context.Context, fileToken, fileType string) error
 	GetRecord(ctx context.Context, appToken, tableId, recordId string) (*larkbitable.AppTableRecord, error)
+
+	// 人事企业版流程
+	GetProcess(ctx context.Context, processId string) (*larkcorehr.GetProcessRespData, error)
 
 	// 其他
 	GetAttachment(ctx context.Context, token string) error
@@ -1429,4 +1433,21 @@ func (c *larkClient) GetRecord(ctx context.Context, appToken, tableId, recordId 
 		return nil, resp
 	}
 	return resp.Data.Record, nil
+}
+
+func (c *larkClient) GetProcess(ctx context.Context, processId string) (*larkcorehr.GetProcessRespData, error) {
+	req := larkcorehr.NewGetProcessReqBuilder().
+		ProcessId(processId).
+		UserIdType(UserId).
+		Build()
+	resp, err := c.client.Corehr.V2.Process.Get(ctx, req)
+	if err != nil {
+		c.Alert(err)
+		return nil, err
+	}
+	if !resp.Success() {
+		c.Alert(errors.New(string(resp.RawBody)))
+		return nil, resp
+	}
+	return resp.Data, nil
 }
