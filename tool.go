@@ -2,6 +2,7 @@ package lark_sdk
 
 import (
 	"encoding/json"
+	larkapproval "github.com/larksuite/oapi-sdk-go/v3/service/approval/v4"
 	larkcorehr "github.com/larksuite/oapi-sdk-go/v3/service/corehr/v2"
 )
 
@@ -32,4 +33,13 @@ func ParseAbstractItem(items []*larkcorehr.ProcessAbstractItem) map[string]strin
 		res[*item.Name.ZhCn] = *item.Value.ZhCn
 	}
 	return res
+}
+
+func CheckNode(instInfo *larkapproval.GetInstanceRespData, nodeName string) (string, bool) {
+	for _, task := range instInfo.TaskList {
+		if *task.Status == larkapproval.StatusPending && *task.NodeName == nodeName {
+			return *task.Id, true
+		}
+	}
+	return "", false
 }
